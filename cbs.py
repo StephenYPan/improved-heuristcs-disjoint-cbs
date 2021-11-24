@@ -243,12 +243,12 @@ def joint_mdd(mdd1, mdd2):
             joint_mdd_edges[(cost1, ((parent1, child1), (parent2, child2)))] = cost1
 
     # add remaining vertices and edges
-    remaining_cost = mdd2[-1][0]
-    for cost, (parent, child) in mdd1:
-        if cost <= remaining_cost:
-            continue
-        joint_mdd_vertices[(cost1, (child1, None))] = cost1
-        joint_mdd_edges[(cost1, (parent1, child1))] = cost1
+    # remaining_cost = mdd2[-1][0]
+    # for cost, (parent, child) in mdd1:
+    #     if cost <= remaining_cost:
+    #         continue
+    #     joint_mdd_vertices[(cost1, (child1, None))] = cost1
+    #     joint_mdd_edges[(cost1, (parent1, child1))] = cost1
 
     # edge_list = []
     # cur_cost = 0
@@ -289,44 +289,57 @@ def joint_mdd(mdd1, mdd2):
     #         cur_cost = cost
     # print('cost:', cost, edge_list)
     # print('\n')
-    return mdd1[-1][0] == next(reversed(joint_mdd_vertices))[0]
+    return mdd2[-1][0] == next(reversed(joint_mdd_vertices))[0]
 
 
-def cg_heuristic(cur_paths, collisions, mdds):
+def cardinal_conflict(mdd1, mdd2):
+    """
+    return true if there exists a cardinal conflict
+    """
+    min_cost = min(mdd1[-1][0], mdd2[-1][0])
+    for i in range(1, min_cost):
+        cost_layer1 = set([e[1] for c, e in mdd1[1:] if c == i])
+        cost_layer2 = set([e[1] for c, e in mdd2[1:] if c == i])
+        if len(cost_layer1) == 1 and len(cost_layer2) == 1:
+            if cost_layer1 == cost_layer2:
+                return True
+    return False
+
+
+def cg_heuristic(mdds):
     """
     Construct a conflict graph and calculate the minimum vertex cover
 
     python3 run_experiments.py --instance custominstances/exp1.txt --disjoint --solver CBS --batch
     """
-    # TODO
-    V = len(cur_paths)
+    # TODO: Speed up calculations
+    V = len(mdds)
     E = 0
     adj_matrix = [[0] * V for i in range(V)]
-    for collision in collisions:
-        a1 = collision['a1']
-        a2 = collision['a2']
-        if joint_mdd(mdds[a1], mdds[a2]):
-            adj_matrix[a1][a2] = 1
-            adj_matrix[a2][a1] = 1
+    for i in range(V):
+        for j in range(V):
+            if j <= i or not cardinal_conflict(mdds[i],mdds[j]):
+                continue
+            adj_matrix[i][j] = 1
+            adj_matrix[j][i] = 1
             E += 1
     min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
     return min_vertex_cover_value
 
 
-def dg_heuristic(paths_changed, mdds):
+def dg_heuristic(mdds):
     """
     Constructs a adjacency matrix and returns the minimum vertex cover
     
     python3 run_experiments.py --instance custominstances/exp1.txt --disjoint --solver CBS --batch
     """
-    # TODO
-    V = len(paths_changed)
+    # TODO: Memorize the dependency graph
+    V = len(mdds)
     E = 0
     adj_matrix = [[0] * V for i in range(V)]
     for i in range(V):
-        # if paths_changed
         for j in range(V):
-            if i <= j:
+            if j <= i:
                 continue
             if joint_mdd(mdds[i], mdds[j]):
                 adj_matrix[i][j] = 1
@@ -563,7 +576,7 @@ class CBSSolver(object):
             for i in range(self.num_of_agents):
                 root['mdds'][i] = self.mdd(root['paths'][i], root['constraints'], i)
         if cg_heuristics:
-            root_h_value = max(root_h_value, cg_heuristic(root['paths'], root['collisions'], root['mdds']))
+            root_h_value = max(root_h_value, cg_heuristic(root['mdds']))
         if dg_heuristics:
             root_h_value = max(root_h_value, dg_heuristic(root['paths'], root['mdds']))
         if wdg_heuristics:
@@ -639,7 +652,7 @@ class CBSSolver(object):
                             continue
                         new_node['mdds'][i] = self.mdd(new_node['paths'][i], new_node['constraints'], i)
                 if cg_heuristics:
-                    h_value = max(h_value, cg_heuristic(new_node['paths'], new_node['collisions'], new_node['mdds']))
+                    h_value = max(h_value, cg_heuristic(new_node['mdds']))
                 if dg_heuristics:
                     h_value = max(h_value, dg_heuristic(paths_changed, new_node['mdds']))
                 if wdg_heuristics:
