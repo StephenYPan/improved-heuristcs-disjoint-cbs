@@ -1,3 +1,4 @@
+from calendar import c
 from logging import raiseExceptions
 from collections import OrderedDict
 from os import times
@@ -5,6 +6,7 @@ import time as timer
 import copy
 import heapq
 import random
+from numpy import require
 
 from pydantic import constr
 from single_agent_planner import compute_heuristics, a_star, get_location, get_sum_of_cost, pop_node, increased_cost_tree_search
@@ -217,7 +219,13 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
-def joint_mdd(mdd1, mdd2):
+def filter_by_constraints(mdd, agent, constraints):
+    for c in constraints:
+        pass
+    return None
+
+
+def joint_mdd(mdd1, mdd2, agent1, agent2, min_cost, constraints):
     """
     Merge two MDDs and return a decision tree.
     return True if solution exists, otherwise false.
@@ -292,21 +300,31 @@ def joint_mdd(mdd1, mdd2):
     return mdd2[-1][0] == next(reversed(joint_mdd_vertices))[0]
 
 
-def cardinal_conflict(mdd1, mdd2):
+def cardinal_conflict(mdd1, mdd2, agent1, agent2, min_timestep, constraints):
     """
     return true if there exists a cardinal conflict
     """
-    min_cost = min(mdd1[-1][0], mdd2[-1][0])
-    for i in range(1, min_cost):
-        cost_layer1 = set([e[1] for c, e in mdd1[1:] if c == i])
-        cost_layer2 = set([e[1] for c, e in mdd2[1:] if c == i])
-        if len(cost_layer1) == 1 and len(cost_layer2) == 1:
-            if cost_layer1 == cost_layer2:
-                return True
+    # Shallow copy, list comprehension
+    constraint1_list = [c for c in constraints if c['agent'] == agent1 and c['timestep'] < min_timestep]
+    constraint2_list = [c for c in constraints if c['agent'] == agent2 and c['timestep'] < min_timestep]
+    required_mdd1 = copy.deepcopy([(t, e) for t, e in mdd1 if t < min_timestep])
+    required_mdd1 = copy.deepcopy([(t, e) for t, e in mdd2 if t < min_timestep])
+    print(constraint1_list)
+    # TODO: Filter by constraints mutates the list
+    new_mdd1 = filter_by_constraints(required_mdd1, agent1, constraints)
+    new_mdd2 = filter_by_constraints(required_mdd1, agent2, constraints)
+    for timestep in range(min_timestep):
+        mdd1_edge_layer = [e for t, e in mdd1 if t == timestep]
+        mdd2_edge_layer = [e for t, e in mdd2 if t == timestep]
+        print('timestep:', timestep, mdd1_edge_layer)
+        # if len(cost_layer1) == 1 and len(cost_layer2) == 1:
+        #     if cost_layer1 == cost_layer2:
+        #         return True
+    print()
     return False
 
 
-def cg_heuristic(mdds):
+def cg_heuristic(mdds, paths, constraints):
     """
     Construct a conflict graph and calculate the minimum vertex cover
 
@@ -318,7 +336,8 @@ def cg_heuristic(mdds):
     adj_matrix = [[0] * V for i in range(V)]
     for i in range(V):
         for j in range(V):
-            if j <= i or not cardinal_conflict(mdds[i],mdds[j]):
+            min_timestep = min(len(paths[i]), len(paths[j]))
+            if j <= i or not cardinal_conflict(mdds[i],mdds[j], i, j, min_timestep, constraints):
                 continue
             adj_matrix[i][j] = 1
             adj_matrix[j][i] = 1
@@ -327,7 +346,7 @@ def cg_heuristic(mdds):
     return min_vertex_cover_value
 
 
-def dg_heuristic(mdds):
+def dg_heuristic(mdds, paths, constraints):
     """
     Constructs a adjacency matrix and returns the minimum vertex cover
     
@@ -339,12 +358,12 @@ def dg_heuristic(mdds):
     adj_matrix = [[0] * V for i in range(V)]
     for i in range(V):
         for j in range(V):
-            if j <= i:
+            min_cost = min(len(paths[i]), len(paths[j]))
+            if j <= i or not joint_mdd(mdds[i],mdds[j], i, j, min_cost, constraints):
                 continue
-            if joint_mdd(mdds[i], mdds[j]):
-                adj_matrix[i][j] = 1
-                adj_matrix[j][i] = 1
-                E += 1
+            adj_matrix[i][j] = 1
+            adj_matrix[j][i] = 1
+            E += 1
     min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
     return min_vertex_cover_value
 
@@ -497,10 +516,10 @@ class CBSSolver(object):
 
     def pop_node(self):
         # _, _, id, node = heapq.heappop(self.open_list)
-        # _, _, id, node = heapq.heappop(self.open_list)
-        g, h, id, node = heapq.heappop(self.open_list)
-        if self.stats:
-            print(' pop - ', 'sum:', g, ' h-value:', h)
+        _, _, id, node = heapq.heappop(self.open_list)
+        # g, h, id, node = heapq.heappop(self.open_list)
+        # if self.stats:
+        #     print(' pop - ', 'sum:', g, ' h-value:', h)
         #     print(' pop - ', 'sum:', gh, ' h-value:', h)
         # print("Expand node {}".format(id))
         self.num_of_expanded += 1
@@ -509,7 +528,6 @@ class CBSSolver(object):
     def prune_open_list(self, cost_cutoff):
         left = 0
         right = len(self.open_list) - 1
-        [0,1,2,3,4]
         while left < right:
             mid = left + right >> 1
             if self.open_list[mid][1] < cost_cutoff:
@@ -518,16 +536,13 @@ class CBSSolver(object):
                 right = mid
         self.open_list = self.open_list[0:right]
 
-    def mdd(self, cur_path, constraints, agent):
+    def mdd(self, cur_path_len, prev_path_len, agent):
         """
         Find the MDD for an agent
 
         python3 run_experiments.py --instance custominstances/exp2.txt --disjoint --solver CBS --batch
         """
-        start = cur_path[0]
-        goal = cur_path[-1]
-        path_cost = len(cur_path) - 1
-        return increased_cost_tree_search(self.my_map, start, goal, path_cost, self.heuristics[agent], agent, constraints)
+        return increased_cost_tree_search(self.my_map, self.starts[agent], self.goals[agent], prev_path_len, cur_path_len, self.heuristics[agent])
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
         """ Finds paths for all agents from their start locations to their goal locations
@@ -554,8 +569,6 @@ class CBSSolver(object):
             'h_value': 0,
             'constraints': [],
             'paths': [],
-            'path_lengths': [],
-            'mdds': [],
             'collisions': []
         }
         root['constraints'] = self.constraints
@@ -568,17 +581,20 @@ class CBSSolver(object):
 
         root['collisions'] = detect_collisions(root['paths'])
         root['cost'] = get_sum_of_cost(root['paths'])
-        root['path_lengths'] = [len(p) for p in root['paths']]
-        root['mdds'] = [None] * self.num_of_agents
+
+        # MDDs are sets to remove duplicates
+        master_mdds = [None] * self.num_of_agents
+        master_mdds_length = [len(p) for p in root['paths']]
 
         root_h_value = 0
         if cg_heuristics or dg_heuristics or wdg_heuristics:
             for i in range(self.num_of_agents):
-                root['mdds'][i] = self.mdd(root['paths'][i], root['constraints'], i)
+                master_mdds[i] = self.mdd(master_mdds_length[i], 0, i)
         if cg_heuristics:
-            root_h_value = max(root_h_value, cg_heuristic(root['mdds']))
+            root_h_value = max(root_h_value, cg_heuristic(master_mdds, root['paths'], root['constraints']))
         if dg_heuristics:
-            root_h_value = max(root_h_value, dg_heuristic(root['paths'], root['mdds']))
+            root_h_value = max(root_h_value, dg_heuristic(master_mdds, root['paths'], root['constraints']))
+        # TODO: FIX PARAMETERS
         if wdg_heuristics:
             root_h_value = max(root_h_value, wdg_heuristic(root['paths'], root['collisions'], root['constraints'], self.my_map, self.heuristics))
         if not (cg_heuristics or dg_heuristics or wdg_heuristics):
@@ -600,8 +616,6 @@ class CBSSolver(object):
                     'h_value': 0,
                     'constraints': [],
                     'paths': [],
-                    'path_lengths': [],
-                    'mdds': [],
                     'collisions': []
                 }
                 new_node['constraints'] = cur_node['constraints'] \
@@ -613,7 +627,6 @@ class CBSSolver(object):
                     continue
                 new_node['paths'] = cur_node['paths'].copy() # Shallow copy
                 new_node['paths'][agent] = path # Edit shallow copy
-                new_node['mdds'] = cur_node['mdds'].copy()
 
                 # Disjoint. Don't add the child node if there exists another agent with no path
                 skip = False
@@ -639,22 +652,24 @@ class CBSSolver(object):
                         continue
                 new_node['collisions'] = detect_collisions(new_node['paths'])
                 new_node['cost'] = get_sum_of_cost(new_node['paths'])
-                new_node['path_lengths'] = [len(p) for p in new_node['paths']]
 
                 h_value = 0
-                mdd_pairs = [[0] * self.num_of_agents for i in range(self.num_of_agents)]
-                paths_changed = [0] * self.num_of_agents
+                new_mdds_length = [len(p) for p in new_node['paths']]
                 # TODO: Calculate and store the joint mdd values for all agents.
                 # Re-calculate the pairs if any agent has changed in path length
+                # mdd_pairs = [[0] * self.num_of_agents for i in range(self.num_of_agents)]
                 if cg_heuristics or dg_heuristics or wdg_heuristics:
                     for i in range(self.num_of_agents):
-                        if cur_node['path_lengths'][i] == new_node['path_lengths'][i]:
+                        if master_mdds_length[i] >= new_mdds_length[i]:
                             continue
-                        new_node['mdds'][i] = self.mdd(new_node['paths'][i], new_node['constraints'], i)
+                        # Search for new mdd[i] of length new_mdds_length[i] and add it to master mdds
+                        master_mdds[i] = master_mdds[i].union(self.mdd(new_mdds_length[i], master_mdds_length[i], i))
+                        master_mdds_length[i] = new_mdds_length[i]
                 if cg_heuristics:
-                    h_value = max(h_value, cg_heuristic(new_node['mdds']))
+                    h_value = max(h_value, cg_heuristic(master_mdds, new_node['paths'], new_node['constraints']))
                 if dg_heuristics:
-                    h_value = max(h_value, dg_heuristic(paths_changed, new_node['mdds']))
+                    h_value = max(h_value, dg_heuristic(master_mdds, new_node['paths'], new_node['constraints']))
+                # TODO: FIX PARAMETERS
                 if wdg_heuristics:
                     h_value = max(h_value, wdg_heuristic(new_node['paths'], new_node['collisions'], new_node['constraints'], self.my_map, self.heuristics))
                 if not (cg_heuristics or dg_heuristics or wdg_heuristics):
