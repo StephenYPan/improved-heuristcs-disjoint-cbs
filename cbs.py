@@ -219,9 +219,13 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
-def filter_by_constraints(mdd, constraints):
-    if len(constraints) == 0:
-        return mdd
+def reduce_mdd(mdd, path, constraints):
+    goal_node = path[-1]
+    goal_timestep = len(path) - 1
+    for timestep, edge in mdd:
+        if timestep == goal_timestep and edge[1] != goal_node:
+            mdd.remove((timestep, edge))
+
     for timestep, edge in mdd:
         for c in constraints:
             if timestep != c['timestep']:
@@ -319,36 +323,35 @@ def joint_mdd(mdd1, mdd2, agent1, agent2, min_cost, constraints):
     return mdd2[-1][0] == next(reversed(joint_mdd_vertices))[0]
 
 
-def cardinal_conflict(mdd1, mdd2, agent1, agent2, min_timestep, constraints):
+def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     """
     return true if there exists a cardinal conflict
+    mdds[0] is equal or shorter than mdds[1]
+
     python3 run_experiments.py --instance custominstances/exp4.txt --disjoint --solver CBS --batch --cg
     """
-    # Shallow copy, list comprehension
     constraint_list = [None, None]
-    agents = [agent1, agent2]
-    new_mdds = [mdd1, mdd2]
+    new_mdds = [None, None]
     for i in range(2):
         constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
-        new_mdds[i] = copy.deepcopy([(t, e) for t, e in new_mdds[i] if t < min_timestep])
-        new_mdds[i] = filter_by_constraints(new_mdds[i], constraint_list[i])
-    # print(constraint_list[0])
-    # for i in range(min_timestep):
-    #     original = sorted([e for t, e in mdd1 if t == i])
-    #     new = sorted([e for t, e in new_mdds[0] if t == i])
-    #     if len(original) == len(new):
-    #         continue
-    #     print('old, t:', i, original)
-    #     print('new, t:', i, new)
-    #     print()
-    # print('\n')
+        new_mdds[i] = copy.deepcopy([(t, e) for t, e in mdds[i] if t < min_timestep])
+        new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], constraint_list[i])
+        new_mdds[i].sort()
 
-    for timestep in range(min_timestep):
-        mdd1_edge_layer = [e for t, e in new_mdds[0] if t == timestep]
-        mdd2_edge_layer = [e for t, e in new_mdds[1] if t == timestep]
-        if len(mdd1_edge_layer) == 1 and len(mdd2_edge_layer) == 1:
-            if mdd1_edge_layer == mdd2_edge_layer:
-                return True
+    agent1_vertices = set()
+    agent2_vertices = set()
+    agent1_edges = set()
+    agent2_edges = set()
+    agent1_vertices.add(new_mdds[0][0][1])
+    agent2_vertices.add(new_mdds[1][0][1])
+    print(agent1_vertices)
+    print(agent2_vertices)
+
+    for t1, edge1 in new_mdds[0]:
+        for t2, edge2 in new_mdds[1]:
+            if t2 > t1:
+                break
+
     return False
 
 
@@ -356,7 +359,7 @@ def cg_heuristic(mdds, paths, constraints):
     """
     Construct a conflict graph and calculate the minimum vertex cover
 
-    python3 run_experiments.py --instance custominstances/exp1.txt --disjoint --solver CBS --batch
+    python3 run_experiments.py --instance custominstances/exp1.txt --disjoint --solver CBS --batch --cg
     """
     # TODO: Speed up calculations
     V = len(mdds)
@@ -364,13 +367,23 @@ def cg_heuristic(mdds, paths, constraints):
     adj_matrix = [[0] * V for i in range(V)]
     for i in range(V):
         for j in range(V):
+            if i <= j:
+                continue
             min_timestep = min(len(paths[i]), len(paths[j]))
-            if i <= j or not cardinal_conflict(mdds[i], mdds[j], i, j, min_timestep, constraints):
+            if len(paths[i]) > len(paths[j]):
+                i, j = j, i
+            mdds = [mdds[i], mdds[j]]
+            agents = [i, j]
+            paths = [paths[i], paths[j]]
+            if not cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
                 continue
             adj_matrix[i][j] = 1
             adj_matrix[j][i] = 1
             E += 1
+    # for r in adj_matrix:
+    #     print(r)
     min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
+    # print(min_vertex_cover_value,'\n')
     return min_vertex_cover_value
 
 
@@ -544,10 +557,10 @@ class CBSSolver(object):
 
     def pop_node(self):
         # _, _, id, node = heapq.heappop(self.open_list)
-        # _, _, id, node = heapq.heappop(self.open_list)
-        g, h, id, node = heapq.heappop(self.open_list)
-        if self.stats:
-            print(' pop - ', 'sum:', g, ' h-value:', h)
+        _, _, id, node = heapq.heappop(self.open_list)
+        # g, h, id, node = heapq.heappop(self.open_list)
+        # if self.stats:
+        #     print(' pop - ', 'sum:', g, ' h-value:', h)
         #     print(' pop - ', 'sum:', gh, ' h-value:', h)
         # print("Expand node {}".format(id))
         self.num_of_expanded += 1
@@ -629,6 +642,8 @@ class CBSSolver(object):
             h_value = len(root['collisions'])
         root['h_value'] = root_h_value
         self.push_node(root)
+
+        # return
 
         while self.open_list:
             cur_node = self.pop_node()
