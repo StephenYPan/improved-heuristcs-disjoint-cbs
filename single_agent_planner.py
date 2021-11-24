@@ -177,59 +177,53 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
     return None  # Failed to find solutions
 
 
-def increased_cost_tree_search(my_map, start_loc, goal_loc, path_cost, h_values, agent, constraints):
-    """ my_map      - binary obstacle map
-        start_loc   - start position
-        goal_loc    - goal position
-        agent       - the agent that is being re-planned
-        constraints - constraints defining where robot should or cannot go at each timestep
-    """
-    my_map_size = [cell for submap in my_map for cell in submap].count(False) # count moveable spaces
-    neg_constraint_table, pos_constraint_table = build_constraint_table(constraints, agent)
+def increased_cost_tree_search(my_map, start_loc, goal_loc, min_path_cost, max_path_cost, h_values):
+        """ 
+        A* search
+        Returns a set of all possible edges
+        [min_path_cost, max_path_cost)
+        """
+        my_map_size = [cell for submap in my_map for cell in submap].count(False) # count moveable spaces
 
-    ict = dict()
-    ict[(0, start_loc)] = 0
-    valid_path = []
-    open_list = []
-    root = {
-        'loc': start_loc,
-        'g_val': 0,
-        'h_val': h_values[start_loc],
-        'timestep': 0,
-        'parent': None
-    }
-    node_id = 0
-    heapq.heappush(open_list, (root['g_val'] + root['h_val'], root['h_val'], node_id, root))
-    while open_list:
-        _, _, _, cur = heapq.heappop(open_list)
-        if cur['timestep'] == path_cost and cur['loc'] == goal_loc:
-            valid_path = get_path(cur)
-            for t, e in enumerate(zip(valid_path, valid_path[1:])):
-                ict[(t + 1, e)] = t + 1
-            continue
-        for direction in range(5):
-            child_loc = move(cur['loc'], direction)
-            child_timestep = cur['timestep'] + 1
-            if child_loc[0] < 0 or child_loc[0] >= len(my_map) \
-                or child_loc[1] < 0 or child_loc[1] >= len(my_map[0]) :
+        ict = set()
+        ict.add((0, start_loc))
+        
+        valid_path = []
+        open_list = []
+        root = {
+            'loc': start_loc,
+            'g_val': 0,
+            'h_val': h_values[start_loc],
+            'timestep': 0,
+            'parent': None
+        }
+        node_id = 0
+        heapq.heappush(open_list, (root['g_val'] + root['h_val'], root['h_val'], node_id, root))
+        while open_list:
+            _, _, _, cur = heapq.heappop(open_list)
+            if cur['timestep'] >= min_path_cost and cur['timestep'] < max_path_cost and cur['loc'] == goal_loc:
+                valid_path = get_path(cur)
+                for t, e in enumerate(zip(valid_path, valid_path[1:])):
+                    ict.add((t + 1, e))
                 continue
-            if my_map[child_loc[0]][child_loc[1]]:
-                continue
-            if child_timestep > path_cost:
-                continue
-            if is_constrained(cur['loc'], child_loc, child_timestep, neg_constraint_table):
-                continue
-            if child_timestep in pos_constraint_table \
-                and not is_pos_constraint(cur['loc'], child_loc, child_timestep, pos_constraint_table):
-                continue
-            child = {
-                'loc': child_loc,
-                'g_val': cur['g_val'] + 1,
-                'h_val': h_values[child_loc],
-                'timestep': child_timestep,
-                'parent': cur
-            }
-            node_id += 1
-            heapq.heappush(open_list, (child['g_val'] + child['h_val'], child['h_val'], node_id, child))
+            for direction in range(5):
+                child_loc = move(cur['loc'], direction)
+                child_timestep = cur['timestep'] + 1
+                if child_loc[0] < 0 or child_loc[0] >= len(my_map) \
+                    or child_loc[1] < 0 or child_loc[1] >= len(my_map[0]) :
+                    continue
+                if my_map[child_loc[0]][child_loc[1]]:
+                    continue
+                if child_timestep >= max_path_cost:
+                    continue
+                child = {
+                    'loc': child_loc,
+                    'g_val': cur['g_val'] + 1,
+                    'h_val': h_values[child_loc],
+                    'timestep': child_timestep,
+                    'parent': cur
+                }
+                node_id += 1
+                heapq.heappush(open_list, (child['g_val'] + child['h_val'], child['h_val'], node_id, child))
 
-    return sorted(ict)
+        return ict
