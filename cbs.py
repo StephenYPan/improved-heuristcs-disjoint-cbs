@@ -359,6 +359,14 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     print(agent1_vertices)
     print(agent2_vertices)
 
+    for i in range(min_timestep):
+        print('t:',i,[e for t, e in new_mdds[0] if t == i])
+    print()
+
+    for i in range(min_timestep):
+        print('t:',i,[e for t, e in new_mdds[1] if t == i])
+    print()
+
     for t1, edge1 in new_mdds[0]:
         for t2, edge2 in new_mdds[1]:
             if t2 > t1:
@@ -382,15 +390,16 @@ def cg_heuristic(mdds, paths, constraints):
             if i <= j:
                 continue
             min_timestep = min(len(paths[i]), len(paths[j]))
+            temp_i, temp_j = i, j
             if len(paths[i]) > len(paths[j]):
-                i, j = j, i
-            mdds = [mdds[i], mdds[j]]
-            agents = [i, j]
-            paths = [paths[i], paths[j]]
-            if not cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
+                temp_i, temp_j = j, i
+            new_mdds = [mdds[temp_i], mdds[temp_j]]
+            new_agents = [temp_i, temp_j]
+            new_paths = [paths[temp_i], paths[temp_j]]
+            if not cardinal_conflict(new_mdds, new_agents, new_paths, min_timestep, constraints):
                 continue
-            adj_matrix[i][j] = 1
-            adj_matrix[j][i] = 1
+            adj_matrix[temp_i][temp_j] = 1
+            adj_matrix[temp_j][temp_i] = 1
             E += 1
     # for r in adj_matrix:
     #     print(r)
