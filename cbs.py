@@ -219,10 +219,29 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
-def filter_by_constraints(mdd, agent, constraints):
-    for c in constraints:
-        pass
-    return None
+def filter_by_constraints(mdd, constraints):
+    if len(constraints) == 0:
+        return mdd
+    for timestep, edge in mdd:
+        for c in constraints:
+            if timestep != c['timestep']:
+                continue
+            if len(c['loc']) == 2: # Edge
+                constraint_edge = tuple(c['loc'])
+                if c['positive'] and edge != constraint_edge:
+                    if (timestep, edge) in mdd:
+                        mdd.remove((timestep, edge))
+                elif not c['positive'] and edge == constraint_edge:
+                    mdd.remove((timestep, edge)) # Do I need to check if edge exists before remove?
+            else: # Vertex
+                constraint_vertex = c['loc'][0]
+                if c['positive'] and edge[1] != constraint_vertex:
+                    if (timestep, edge) in mdd:
+                        mdd.remove((timestep, edge))
+                elif not c['positive'] and edge[1] == constraint_vertex:
+                    if (timestep, edge) in mdd:
+                        mdd.remove((timestep, edge))
+    return mdd
 
 
 def joint_mdd(mdd1, mdd2, agent1, agent2, min_cost, constraints):
@@ -303,24 +322,33 @@ def joint_mdd(mdd1, mdd2, agent1, agent2, min_cost, constraints):
 def cardinal_conflict(mdd1, mdd2, agent1, agent2, min_timestep, constraints):
     """
     return true if there exists a cardinal conflict
+    python3 run_experiments.py --instance custominstances/exp4.txt --disjoint --solver CBS --batch --cg
     """
     # Shallow copy, list comprehension
-    constraint1_list = [c for c in constraints if c['agent'] == agent1 and c['timestep'] < min_timestep]
-    constraint2_list = [c for c in constraints if c['agent'] == agent2 and c['timestep'] < min_timestep]
-    required_mdd1 = copy.deepcopy([(t, e) for t, e in mdd1 if t < min_timestep])
-    required_mdd1 = copy.deepcopy([(t, e) for t, e in mdd2 if t < min_timestep])
-    print(constraint1_list)
-    # TODO: Filter by constraints mutates the list
-    new_mdd1 = filter_by_constraints(required_mdd1, agent1, constraints)
-    new_mdd2 = filter_by_constraints(required_mdd1, agent2, constraints)
+    constraint_list = [None, None]
+    agents = [agent1, agent2]
+    new_mdds = [mdd1, mdd2]
+    for i in range(2):
+        constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
+        new_mdds[i] = copy.deepcopy([(t, e) for t, e in new_mdds[i] if t < min_timestep])
+        new_mdds[i] = filter_by_constraints(new_mdds[i], constraint_list[i])
+    # print(constraint_list[0])
+    # for i in range(min_timestep):
+    #     original = sorted([e for t, e in mdd1 if t == i])
+    #     new = sorted([e for t, e in new_mdds[0] if t == i])
+    #     if len(original) == len(new):
+    #         continue
+    #     print('old, t:', i, original)
+    #     print('new, t:', i, new)
+    #     print()
+    # print('\n')
+
     for timestep in range(min_timestep):
-        mdd1_edge_layer = [e for t, e in mdd1 if t == timestep]
-        mdd2_edge_layer = [e for t, e in mdd2 if t == timestep]
-        print('timestep:', timestep, mdd1_edge_layer)
-        # if len(cost_layer1) == 1 and len(cost_layer2) == 1:
-        #     if cost_layer1 == cost_layer2:
-        #         return True
-    print()
+        mdd1_edge_layer = [e for t, e in new_mdds[0] if t == timestep]
+        mdd2_edge_layer = [e for t, e in new_mdds[1] if t == timestep]
+        if len(mdd1_edge_layer) == 1 and len(mdd2_edge_layer) == 1:
+            if mdd1_edge_layer == mdd2_edge_layer:
+                return True
     return False
 
 
@@ -337,7 +365,7 @@ def cg_heuristic(mdds, paths, constraints):
     for i in range(V):
         for j in range(V):
             min_timestep = min(len(paths[i]), len(paths[j]))
-            if j <= i or not cardinal_conflict(mdds[i],mdds[j], i, j, min_timestep, constraints):
+            if i <= j or not cardinal_conflict(mdds[i], mdds[j], i, j, min_timestep, constraints):
                 continue
             adj_matrix[i][j] = 1
             adj_matrix[j][i] = 1
@@ -516,10 +544,10 @@ class CBSSolver(object):
 
     def pop_node(self):
         # _, _, id, node = heapq.heappop(self.open_list)
-        _, _, id, node = heapq.heappop(self.open_list)
-        # g, h, id, node = heapq.heappop(self.open_list)
-        # if self.stats:
-        #     print(' pop - ', 'sum:', g, ' h-value:', h)
+        # _, _, id, node = heapq.heappop(self.open_list)
+        g, h, id, node = heapq.heappop(self.open_list)
+        if self.stats:
+            print(' pop - ', 'sum:', g, ' h-value:', h)
         #     print(' pop - ', 'sum:', gh, ' h-value:', h)
         # print("Expand node {}".format(id))
         self.num_of_expanded += 1
@@ -618,8 +646,9 @@ class CBSSolver(object):
                     'paths': [],
                     'collisions': []
                 }
+
                 new_node['constraints'] = cur_node['constraints'] \
-                    + [c for c in [constraint] if c not in cur_node['constraints']] # New list, union constraint
+                    + [c for c in [constraint] if c not in cur_node['constraints']] 
                 agent = constraint['agent']
                 path = a_star(self.my_map, self.starts[agent], self.goals[agent],
                               self.heuristics[agent], agent, new_node['constraints'])
