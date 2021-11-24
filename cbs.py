@@ -219,15 +219,17 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
-def reduce_mdd(mdd, path, constraints):
+def reduce_mdd(mdd, path, min_timestep, constraints):
     new_mdd = copy.deepcopy(mdd)
     goal_node = path[-1]
     goal_timestep = len(path) - 1
 
-    for timestep, edge in mdd: # Remove all non-goal nodes at path length
-        if timestep == goal_timestep and edge[1] != goal_node:
-            if (timestep, edge) in new_mdd:
-                new_mdd.remove((timestep, edge))
+    # Remove non-goal nodes only if the goal node is at path length
+    if goal_timestep == min_timestep - 1:
+        for timestep, edge in mdd:
+            if timestep == goal_timestep and edge[1] != goal_node:
+                if (timestep, edge) in new_mdd:
+                    new_mdd.remove((timestep, edge))
 
     for timestep, edge in mdd:
         for c in constraints:
@@ -339,15 +341,16 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     """
     return true if there exists a cardinal conflict
     mdds[0] is equal or shorter than mdds[1]
+    meaning, mdds[1]'s last layer may or maynot contain the solution.
 
-    python3 run_experiments.py --instance custominstances/exp4.txt --disjoint --solver CBS --batch --cg
+    python3 run_experiments.py --instance custominstances/exp3.txt --disjoint --solver CBS --batch --cg
     """
     constraint_list = [None, None]
     new_mdds = [None, None]
     for i in range(2):
         constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
         new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
-        new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], constraint_list[i])
+        new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
         new_mdds[i].sort()
 
     agent1_vertices = set()
