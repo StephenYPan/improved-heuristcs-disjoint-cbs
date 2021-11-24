@@ -231,8 +231,8 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
                 if (timestep, edge) in new_mdd:
                     new_mdd.remove((timestep, edge))
 
-    for timestep, edge in mdd:
-        for c in constraints:
+    for c in constraints:
+        for timestep, edge in mdd:
             if timestep != c['timestep']:
                 continue
             if len(c['loc']) == 2: # Remove edges
@@ -370,6 +370,19 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         print('t:',i,[e for t, e in new_mdds[1] if t == i])
     print()
 
+    """
+    t: 0 [(0, 1)]
+    t: 1 [((0, 1), (0, 1)), ((0, 1), (0, 2)), ((0, 1), (1, 1))]
+    t: 2 [((1, 1), (2, 1))]
+    t: 3 [((2, 1), (2, 1)), ((2, 1), (2, 2))]
+    t: 4 [((2, 2), (3, 2))]
+
+    t: 0 [(1, 0)]
+    t: 1 [((1, 0), (1, 0)), ((1, 0), (2, 0))]
+    t: 2 [((1, 0), (1, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 0))]
+    t: 3 [((1, 1), (1, 2)), ((1, 1), (2, 1)), ((1, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 0), (2, 1))]
+    t: 4 [((1, 2), (2, 2)), ((2, 1), (2, 2)), ((2, 2), (2, 2)), ((2, 2), (2, 3))]
+    """
     for t1, edge1 in new_mdds[0]:
         for t2, edge2 in new_mdds[1]:
             if t2 > t1:
