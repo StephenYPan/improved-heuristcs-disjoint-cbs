@@ -220,32 +220,44 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
 
 
 def reduce_mdd(mdd, path, constraints):
+    new_mdd = copy.deepcopy(mdd)
     goal_node = path[-1]
     goal_timestep = len(path) - 1
-    for timestep, edge in mdd:
+
+    for timestep, edge in mdd: # Remove all non-goal nodes at path length
         if timestep == goal_timestep and edge[1] != goal_node:
-            mdd.remove((timestep, edge))
+            if (timestep, edge) in new_mdd:
+                new_mdd.remove((timestep, edge))
 
     for timestep, edge in mdd:
         for c in constraints:
             if timestep != c['timestep']:
                 continue
-            if len(c['loc']) == 2: # Edge
+            if len(c['loc']) == 2: # Remove edges
                 constraint_edge = tuple(c['loc'])
                 if c['positive'] and edge != constraint_edge:
-                    if (timestep, edge) in mdd:
-                        mdd.remove((timestep, edge))
+                    if (timestep, edge) in new_mdd:
+                        new_mdd.remove((timestep, edge))
                 elif not c['positive'] and edge == constraint_edge:
-                    mdd.remove((timestep, edge)) # Do I need to check if edge exists before remove?
-            else: # Vertex
+                    if (timestep, edge) in new_mdd:
+                        new_mdd.remove((timestep, edge))
+            else: # Remove vertices and related child edges
                 constraint_vertex = c['loc'][0]
                 if c['positive'] and edge[1] != constraint_vertex:
-                    if (timestep, edge) in mdd:
-                        mdd.remove((timestep, edge))
+                    if (timestep, edge) in new_mdd:
+                        new_mdd.remove((timestep, edge))
+                    for t, e in mdd:
+                        if t - 1 == timestep and e[0] != constraint_vertex:
+                            if (t, e) in new_mdd:
+                                new_mdd.remove((t, e))
                 elif not c['positive'] and edge[1] == constraint_vertex:
-                    if (timestep, edge) in mdd:
-                        mdd.remove((timestep, edge))
-    return mdd
+                    if (timestep, edge) in new_mdd:
+                        new_mdd.remove((timestep, edge))
+                    for t, e in mdd:
+                        if t - 1 == timestep and e[0] == constraint_vertex:
+                            if (t, e) in new_mdd:
+                                new_mdd.remove((t, e))
+    return new_mdd
 
 
 def joint_mdd(mdd1, mdd2, agent1, agent2, min_cost, constraints):
@@ -334,7 +346,7 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     new_mdds = [None, None]
     for i in range(2):
         constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
-        new_mdds[i] = copy.deepcopy([(t, e) for t, e in mdds[i] if t < min_timestep])
+        new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], constraint_list[i])
         new_mdds[i].sort()
 
