@@ -144,7 +144,7 @@ def min_vertex_cover(graph, V, E):
     if E == 0:
         return (0, 0)
     left = 0
-    right = min(E + 1, V)
+    right = min(E + 1, V) # |E| is a better upperbound than |V|, |E| + 1 because of mid calculations
     Set = 0
     while left < right:
         mid = left + right >> 1
@@ -325,7 +325,7 @@ def joint_dependency_graph(mdds, agents, paths, min_timestep, constraints):
     #         cur_cost = cost
     # print('cost:', cost, edge_list)
     # print('\n')
-    return joint_mdd, False
+    return (joint_mdd, False)
 
 
 def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
@@ -343,8 +343,8 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
 
-    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was tempered with'
-    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was tempered with'
+    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was modified'
+    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was modified'
 
     for i in range(1, min_timestep):
         agent1_edge = set([(v, u) for t, (u, v) in new_mdds[0] if t == i])
