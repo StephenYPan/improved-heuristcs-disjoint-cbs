@@ -10,15 +10,6 @@ from single_agent_planner import compute_heuristics, a_star, get_location, get_s
 
 
 def detect_collision(path1, path2):
-    ##############################
-    # Task 3.1: Return the first collision that occurs between two robot paths (or None if there is no collision)
-    #           There are two types of collisions: vertex collision and edge collision.
-    #           A vertex collision occurs if both robots occupy the same location at the same timestep
-    #           An edge collision occurs if the robots swap their location at the same timestep.
-    #           You should use "get_location(path, t)" to get the location of a robot at time t.
-
-    # python3 run_experiments.py --instance instances/exp2_1.txt --solver CBS
-
     for t in range(max(len(path1), len(path2))):
         cur_loc1 = get_location(path1, t)
         cur_loc2 = get_location(path2, t)
@@ -32,12 +23,6 @@ def detect_collision(path1, path2):
 
 
 def detect_collisions(paths):
-    ##############################
-    # Task 3.1: Return a list of first collisions between all robot pairs.
-    #           A collision can be represented as dictionary that contains the id of the two robots, the vertex or edge
-    #           causing the collision, and the timestep at which the collision occurred.
-    #           You should use your detect_collision function to find a collision between two robots.
-
     result = []
     num_agents = len(paths)
     freq_row = [0] * num_agents
@@ -70,14 +55,6 @@ def detect_collisions(paths):
 
 
 def standard_splitting(collision):
-    ##############################
-    # Task 3.2: Return a list of (two) constraints to resolve the given collision
-    #           Vertex collision: the first constraint prevents the first agent to be at the specified location at the
-    #                            specified timestep, and the second constraint prevents the second agent to be at the
-    #                            specified location at the specified timestep.
-    #           Edge collision: the first constraint prevents the first agent to traverse the specified edge at the
-    #                          specified timestep, and the second constraint prevents the second agent to traverse the
-    #                          specified edge at the specified timestep
     result = []
     agent1 = collision['a1']
     agent2 = collision['a2']
@@ -95,18 +72,6 @@ def standard_splitting(collision):
 
 
 def disjoint_splitting(collision):
-    ##############################
-    # Task 4.1: Return a list of (two) constraints to resolve the given collision
-    #           Vertex collision: the first constraint enforces one agent to be at the specified location at the
-    #                            specified timestep, and the second constraint prevents the same agent to be at the
-    #                            same location at the timestep.
-    #           Edge collision: the first constraint enforces one agent to traverse the specified edge at the
-    #                          specified timestep, and the second constraint prevents the same agent to traverse the
-    #                          specified edge at the specified timestep
-    #           Choose the agent randomly
-
-    # Task 4.1 Test
-    # python3 run_experiments.py --instance instances/exp4.txt --solver CBS
     result = standard_splitting(collision)
     rand_agent = random.randint(0, 1)
     for i, predicate in zip([0, 1], [True, False]):
@@ -418,7 +383,6 @@ def dg_heuristic(mdds, paths, constraints):
     
     python3 run_experiments.py --instance custominstances/exp1.txt --disjoint --solver CBS --batch
     """
-    # TODO: Memorize the dependency graph
     V = len(mdds)
     E = 0
     adj_matrix = [[0] * V for i in range(V)]
@@ -571,10 +535,11 @@ class CBSSolver(object):
         if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
             g_value = node['cost']
             h_value = node['h_value']
+            heapq.heappush(self.open_list, (g_value + h_value, h_value, self.num_of_generated, node))
         else:
             g_value = node['cost']
             h_value = len(node['collisions'])
-        heapq.heappush(self.open_list, (g_value + h_value, h_value, self.num_of_generated, node))
+            heapq.heappush(self.open_list, (g_value, h_value, self.num_of_generated, node))
         # if self.stats:
         #     print('push - ', 'sum:', g_value + h_value, ' h-value:', h_value)
         # print("Generate node {}".format(self.num_of_generated))
