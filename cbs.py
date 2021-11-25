@@ -1,4 +1,3 @@
-from calendar import c
 from logging import raiseExceptions
 from collections import OrderedDict
 from os import times
@@ -6,9 +5,7 @@ import time as timer
 import copy
 import heapq
 import random
-from numpy import require
 
-from pydantic import constr
 from single_agent_planner import compute_heuristics, a_star, get_location, get_sum_of_cost, pop_node, increased_cost_tree_search
 
 
@@ -225,51 +222,51 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
     see: https://stackoverflow.com/questions/1207406/how-to-remove-items-from-a-list-while-iterating
     """
     new_mdd = copy.deepcopy(mdd)
-    goal_node = path[-1]
-    goal_timestep = len(path) - 1
-    
-    # Remove non-goal nodes only if the goal node is at path length
-    if goal_timestep == min_timestep - 1:
-        last_edges = [(t, e) for t, e in new_mdd if t == goal_timestep]
+    # Remove non-goal nodes iff the goal node is at min timestep
+    if len(path) == min_timestep:
+        last_edges = [(t, e) for t, e in new_mdd if t == min_timestep - 1]
         for t, e in last_edges:
-            if e[1] != goal_node:
-                new_mdd.remove((t, e))
-
-    # Rewrite the below code
+            if e[1] == path[-1]:
+                continue
+            new_mdd.remove((t, e))
     for c in constraints:
         c_pos = c['positive']
         c_timestep = c['timestep']
-        timestep_edges = [(t, e) for t, e in new_mdd if t == c_timestep]
+        cur_timestep = [(t, e) for t, e in new_mdd if t == c_timestep]
         if len(c['loc']) == 2: # Filter edges
             c_edge = tuple(c['loc'])
-            for t, e in timestep_edges:
+            for t, e in cur_timestep:
                 if c_pos and e != c_edge:
                     new_mdd.remove((t, e))
                 if not c_pos and e == c_edge:
                     new_mdd.remove((t, e))
         else: # Filter vertices
             c_vertex = c['loc'][0]
-            for t, e in timestep_edges:
+            for t, e in cur_timestep:
                 if c_pos and e[1] != c_vertex:
                     new_mdd.remove((t, e))
                 if not c_pos and e[1] == c_vertex:
                     new_mdd.remove((t, e))
-                     
+            # Remove vertices in next timestep that cannot exists
+            next_timestep = [(t, e) for t, e in new_mdd if t == c_timestep + 1]
+            for t, e in next_timestep:
+                if c_pos and e[0] != c_vertex:
+                    new_mdd.remove((t, e))
+                if not c_pos and e[0] == c_vertex:
+                    new_mdd.remove((t, e))
     # Remove non-connecting edges
-    # Remove forward
-    for i in range(1, goal_timestep): 
-        cur_layer = set([e[1] for t, e in new_mdd if t == i])
-        next_layer = [(t, e) for t, e in new_mdd if t == i + 1]
-        for t, e in next_layer:
-            if e[0] not in cur_layer:
-                new_mdd.remove((t, e))
-    # Remove backward
-    for i in range(goal_timestep, 1, -1): 
+    for i in range(min_timestep - 1, 1, -1): # Remove backward
         cur_layer = set([e[0] for t, e in new_mdd if t == i])
         prev_layer = [(t, e) for t, e in new_mdd if t == i - 1]
         for t, e in prev_layer:
             if e[1] not in cur_layer:
                 new_mdd.remove((t, e))
+    for i in range(1, min_timestep - 1): # Remove forward
+        cur_layer = set([e[1] for t, e in new_mdd if t == i])
+        next_layer = [(t, e) for t, e in new_mdd if t == i + 1]
+        for t, e in next_layer:
+            if e[0] not in cur_layer:
+                new_mdd.remove((t, e))  
     return new_mdd
 
 
@@ -356,6 +353,8 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
 
     python3 run_experiments.py --instance custominstances/exp3.txt --disjoint --solver CBS --batch --cg
     """
+    mdd1_len = len(mdds[0])
+    mdd2_len = len(mdds[1])
     constraint_list = [None, None]
     new_mdds = [None, None]
     for i in range(2):
@@ -363,6 +362,9 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
         new_mdds[i].sort()
+
+    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for {agents[0]} was tempered with'
+    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for {agents[1]} was tempered with'
 
     agent1_vertices = set()
     agent2_vertices = set()
@@ -690,8 +692,6 @@ class CBSSolver(object):
             h_value = len(root['collisions'])
         root['h_value'] = root_h_value
         self.push_node(root)
-
-        # return
 
         while self.open_list:
             cur_node = self.pop_node()
