@@ -143,6 +143,9 @@ def min_vertex_cover(graph, V, E):
     """
     if E == 0:
         return (0, 0)
+    if E == 1:
+        _, only_set = is_vertex_cover(graph, V, 1, 1)
+        return 1, only_set
 
     left = 0
     right = V
@@ -235,10 +238,10 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
     return new_mdd
 
 
-def joint_mdd(mdds, agents, min_cost, constraints):
+def joint_dependency_graph(mdds, agents, paths, min_timestep, constraints):
     """
     Merge two MDDs and return a decision tree.
-    return True if solution exists, otherwise false.
+    return joint mdd and boolean. If dependent true, otherwise false.
     """
     # print('agent:',agents[0], '\npath len:', len(paths[0]), '\npath:', paths[0], '\nconstraint:', constraint_list[0])
     # for i in range(min_timestep):
@@ -249,10 +252,20 @@ def joint_mdd(mdds, agents, min_cost, constraints):
     # for i in range(min_timestep):
     #     print('t:',i,[e for t, e in new_mdds[1] if t == i])
     # print('\n')
-    # mdd1 should be longer than mdd2
+
     mdd1_len = len(mdds[0])
     mdd2_len = len(mdds[1])
+    constraint_list = [None, None]
+    new_mdds = [None, None]
+    for i in range(2):
+        constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
+        new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
+        new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
+        new_mdds[i].sort()
+    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was tempered with'
+    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was tempered with'
 
+    joint_mdd = None
     # joint_mdd_vertices = OrderedDict()
     # joint_mdd_edges = OrderedDict()
 
@@ -316,9 +329,7 @@ def joint_mdd(mdds, agents, min_cost, constraints):
     #         cur_cost = cost
     # print('cost:', cost, edge_list)
     # print('\n')
-    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was tempered with'
-    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was tempered with'
-    return False
+    return joint_mdd, False
 
 
 def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
@@ -335,7 +346,6 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
         new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
-        new_mdds[i].sort()
 
     assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was tempered with'
     assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was tempered with'
@@ -373,6 +383,8 @@ def cg_heuristic(mdds, paths, constraints, collisions):
         adj_matrix[a1][a2] = 1
         adj_matrix[a2][a1] = 1
         E += 1
+    if E == 1: # Has to be 1 vertex
+        return 1
     min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
     return min_vertex_cover_value
 
@@ -381,19 +393,33 @@ def dg_heuristic(mdds, paths, constraints):
     """
     Constructs a adjacency matrix and returns the minimum vertex cover
     
-    python3 run_experiments.py --instance custominstances/exp1.txt --disjoint --solver CBS --batch
+    python3 run_experiments.py --instance custominstances/exp2.txt --disjoint --solver CBS --batch --dg
     """
     V = len(mdds)
     E = 0
+    joint_mdd = None
+    dependency_list = [False] * V
+    for i, j in zip(range(V), range(V)[1:]):
+        a1 = i
+        a2 = j
+        if len(paths[a1]) > len(paths[a2]):
+            a1, a2 = a2, a1
+        new_mdds = [mdds[a1], mdds[a2]]
+        agent_pair = [a1, a2]
+        new_paths = [paths[a1], paths[a2]]
+        min_timestep = len(paths[a1])
+        # (conflict_mdds, conflict_agents, conflict_paths, min_timestep, constraints)
+        joint_mdd, dependency_list[j] = joint_dependency_graph(new_mdds, agent_pair, new_paths, min_timestep, constraints)
+
     adj_matrix = [[0] * V for i in range(V)]
-    for i in range(V):
-        for j in range(V):
-            min_cost = min(len(paths[i]), len(paths[j]))
-            if j <= i or not joint_mdd(mdds[i],mdds[j], i, j, min_cost, constraints):
-                continue
-            adj_matrix[i][j] = 1
-            adj_matrix[j][i] = 1
-            E += 1
+    # for dependency in dependency_list:
+    #     # TODO: generate dependency graph from a boolean list
+    #     "do stuff"
+    #     adj_matrix[i][j] = 1
+    #     adj_matrix[j][i] = 1
+    #     E += 1
+    if E == 1:
+        return 1
     min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
     return min_vertex_cover_value
 
@@ -538,7 +564,7 @@ class CBSSolver(object):
             heapq.heappush(self.open_list, (g_value + h_value, h_value, self.num_of_generated, node))
         else:
             g_value = node['cost']
-            h_value = len(node['collisions'])
+            # h_value = len(node['collisions'])
             heapq.heappush(self.open_list, (g_value, h_value, self.num_of_generated, node))
         # if self.stats:
         #     print('push - ', 'sum:', g_value + h_value, ' h-value:', h_value)
@@ -546,7 +572,6 @@ class CBSSolver(object):
         self.num_of_generated += 1
 
     def pop_node(self):
-        # _, _, id, node = heapq.heappop(self.open_list)
         _, _, id, node = heapq.heappop(self.open_list)
         # g, h, id, node = heapq.heappop(self.open_list)
         # if self.stats:
