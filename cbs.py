@@ -143,12 +143,8 @@ def min_vertex_cover(graph, V, E):
     """
     if E == 0:
         return (0, 0)
-    if E == 1:
-        _, only_set = is_vertex_cover(graph, V, 1, 1)
-        return 1, only_set
-
     left = 0
-    right = V
+    right = min(E + 1, V)
     Set = 0
     while left < right:
         mid = left + right >> 1
@@ -566,8 +562,8 @@ class CBSSolver(object):
             g_value = node['cost']
             # h_value = len(node['collisions'])
             heapq.heappush(self.open_list, (g_value, h_value, self.num_of_generated, node))
-        # if self.stats:
-        #     print('push - ', 'sum:', g_value + h_value, ' h-value:', h_value)
+        if self.stats:
+            print('push - ', 'sum:', g_value + h_value, ' h-value:', h_value)
         # print("Generate node {}".format(self.num_of_generated))
         self.num_of_generated += 1
 
