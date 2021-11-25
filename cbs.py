@@ -144,7 +144,7 @@ def min_vertex_cover(graph, V, E):
     if E == 0:
         return (0, 0)
     left = 0
-    right = min(E + 1, V) # |E| is a better upperbound than |V|, |E| + 1 because of mid calculations
+    right = min(E + 1, V) # A better upperbound than |V|. |E| + 1 because of mid calculations
     Set = 0
     while left < right:
         mid = left + right >> 1
@@ -234,7 +234,7 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
     return new_mdd
 
 
-def joint_dependency_graph(mdds, agents, paths, min_timestep, constraints):
+def joint_dependency_diagram(mdds, agents, paths, min_timestep, constraints):
     """
     Merge two MDDs and return a decision tree.
     return joint mdd and boolean. If dependent true, otherwise false.
@@ -257,7 +257,6 @@ def joint_dependency_graph(mdds, agents, paths, min_timestep, constraints):
         constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
         new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
-        new_mdds[i].sort()
     assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was tempered with'
     assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was tempered with'
 
@@ -342,7 +341,6 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
         new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
-
     assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was modified'
     assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was modified'
 
@@ -381,7 +379,7 @@ def cg_heuristic(mdds, paths, constraints, collisions):
         E += 1
     if E == 1: # Has to be 1 vertex
         return 1
-    min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
+    min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
     return min_vertex_cover_value
 
 
@@ -405,7 +403,7 @@ def dg_heuristic(mdds, paths, constraints):
         new_paths = [paths[a1], paths[a2]]
         min_timestep = len(paths[a1])
         # (conflict_mdds, conflict_agents, conflict_paths, min_timestep, constraints)
-        joint_mdd, dependency_list[j] = joint_dependency_graph(new_mdds, agent_pair, new_paths, min_timestep, constraints)
+        joint_mdd, dependency_list[j] = joint_dependency_diagram(new_mdds, agent_pair, new_paths, min_timestep, constraints)
 
     adj_matrix = [[0] * V for i in range(V)]
     # for dependency in dependency_list:
@@ -416,7 +414,7 @@ def dg_heuristic(mdds, paths, constraints):
     #     E += 1
     if E == 1:
         return 1
-    min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
+    min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
     return min_vertex_cover_value
 
 
@@ -562,8 +560,8 @@ class CBSSolver(object):
             g_value = node['cost']
             # h_value = len(node['collisions'])
             heapq.heappush(self.open_list, (g_value, h_value, self.num_of_generated, node))
-        if self.stats:
-            print('push - ', 'sum:', g_value + h_value, ' h-value:', h_value)
+        # if self.stats:
+        #     print('push - ', 'sum:', g_value + h_value, ' h-value:', h_value)
         # print("Generate node {}".format(self.num_of_generated))
         self.num_of_generated += 1
 
@@ -716,7 +714,11 @@ class CBSSolver(object):
                     for i in range(self.num_of_agents):
                         if new_mdds_length[i] <= master_mdds_length[i]:
                             continue
-                        master_mdds[i] = master_mdds[i] | self.mdd(new_mdds_length[i], master_mdds_length[i], i) # Set union
+                        start = timer.time()
+                        new_mdd = self.mdd(new_mdds_length[i], master_mdds_length[i], i)
+                        master_mdds[i] = master_mdds[i] | new_mdd # Set union
+                        end = timer.time() - start
+                        print(f'agent: {i}, old-len: {master_mdds_length[i]:02}, new-len: {new_mdds_length[i]:02}, find time: {end:.2f}')
                         master_mdds_length[i] = new_mdds_length[i]
                 if cg_heuristics:
                     h_value = max(h_value, cg_heuristic(master_mdds, new_node['paths'], new_node['constraints'], new_node['collisions']))
