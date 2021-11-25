@@ -233,40 +233,40 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
         c_pos = c['positive']
         c_timestep = c['timestep']
         cur_timestep = [(t, e) for t, e in new_mdd if t == c_timestep]
-        if len(c['loc']) == 2: # Filter edges
-            c_edge = tuple(c['loc'])
-            for t, e in cur_timestep:
-                if c_pos and e != c_edge:
-                    new_mdd.remove((t, e))
-                if not c_pos and e == c_edge:
-                    new_mdd.remove((t, e))
-        else: # Filter vertices
+        if len(c['loc']) == 1: # Filter vertices
             c_vertex = c['loc'][0]
             for t, e in cur_timestep:
                 if c_pos and e[1] != c_vertex:
                     new_mdd.remove((t, e))
                 if not c_pos and e[1] == c_vertex:
                     new_mdd.remove((t, e))
-            # Remove vertices in next timestep that cannot exists
+            # Remove vertices in next timestep that cannot exist
             next_timestep = [(t, e) for t, e in new_mdd if t == c_timestep + 1]
             for t, e in next_timestep:
                 if c_pos and e[0] != c_vertex:
                     new_mdd.remove((t, e))
                 if not c_pos and e[0] == c_vertex:
                     new_mdd.remove((t, e))
-    # Remove non-connecting edges
-    for i in range(min_timestep - 1, 1, -1): # Remove backward
+        else: # Filter edges
+            c_edge = tuple(c['loc'])
+            for t, e in cur_timestep:
+                if c_pos and e != c_edge:
+                    new_mdd.remove((t, e))
+                if not c_pos and e == c_edge:
+                    new_mdd.remove((t, e))
+    # Remove non-connecting nodes
+    for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without parents
         cur_layer = set([e[0] for t, e in new_mdd if t == i])
         prev_layer = [(t, e) for t, e in new_mdd if t == i - 1]
         for t, e in prev_layer:
             if e[1] not in cur_layer:
                 new_mdd.remove((t, e))
-    for i in range(1, min_timestep - 1): # Remove forward
+    for i in range(1, min_timestep - 1): # Remove forward, nodes without children
         cur_layer = set([e[1] for t, e in new_mdd if t == i])
         next_layer = [(t, e) for t, e in new_mdd if t == i + 1]
         for t, e in next_layer:
             if e[0] not in cur_layer:
-                new_mdd.remove((t, e))  
+                new_mdd.remove((t, e))
     return new_mdd
 
 
@@ -363,26 +363,18 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
         new_mdds[i].sort()
 
-    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for {agents[0]} was tempered with'
-    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for {agents[1]} was tempered with'
+    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was tempered with'
+    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was tempered with'
 
-    agent1_vertices = set()
-    agent2_vertices = set()
-    agent1_edges = set()
-    agent2_edges = set()
-    agent1_vertices.add(new_mdds[0][0][1])
-    agent2_vertices.add(new_mdds[1][0][1])
-
-    print('agent:',agents[0], 'path:', paths[0])
-    print('constraint:', constraint_list[0])
+    print('agent:',agents[0], '\npath len:', len(paths[0]), '\npath:', paths[0], '\nconstraint:', constraint_list[0])
     for i in range(min_timestep):
         print('t:',i,[e for t, e in new_mdds[0] if t == i])
     print()
 
-    print('agent:',agents[1], 'path:', paths[1])
-    print('constraint:', constraint_list[1])
+    print('agent:',agents[1], '\npath len:', len(paths[1]), '\npath:', paths[1], '\nconstraint:', constraint_list[1])
     for i in range(min_timestep):
         print('t:',i,[e for t, e in new_mdds[1] if t == i])
+    print('\n')
 
     """
     t: 0 [(0, 1)]
@@ -397,11 +389,18 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     t: 3 [((1, 1), (1, 2)), ((1, 1), (2, 1)), ((1, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 0), (2, 1))]
     t: 4 [((1, 2), (2, 2)), ((2, 1), (2, 2)), ((2, 2), (2, 2)), ((2, 2), (2, 3))]
     """
+
+    agent1_vertices = set()
+    agent2_vertices = set()
+    agent1_edges = set()
+    agent2_edges = set()
+    agent1_vertices.add(new_mdds[0][0][1])
+    agent2_vertices.add(new_mdds[1][0][1])
+
     for t1, edge1 in new_mdds[0]:
         for t2, edge2 in new_mdds[1]:
             if t2 > t1:
                 break
-    print('\n')
     return False
 
 
