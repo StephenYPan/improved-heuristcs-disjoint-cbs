@@ -359,16 +359,17 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     agent2_edges = set()
     agent1_vertices.add(new_mdds[0][0][1])
     agent2_vertices.add(new_mdds[1][0][1])
-    print(agent1_vertices)
-    print(agent2_vertices)
 
+    print('agent:',agents[0], 'path:', paths[0])
+    print('constraint:', constraint_list[0])
     for i in range(min_timestep):
         print('t:',i,[e for t, e in new_mdds[0] if t == i])
     print()
 
+    print('agent:',agents[1], 'path:', paths[1])
+    print('constraint:', constraint_list[1])
     for i in range(min_timestep):
         print('t:',i,[e for t, e in new_mdds[1] if t == i])
-    print()
 
     """
     t: 0 [(0, 1)]
@@ -387,36 +388,35 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         for t2, edge2 in new_mdds[1]:
             if t2 > t1:
                 break
-
+    print('\n')
     return False
 
 
-def cg_heuristic(mdds, paths, constraints):
+def cg_heuristic(mdds, paths, constraints, collisions):
     """
     Construct a conflict graph and calculate the minimum vertex cover
 
     python3 run_experiments.py --instance custominstances/exp1.txt --disjoint --solver CBS --batch --cg
     """
     # TODO: Speed up calculations
+    # We need to check if the conflict is cardinal or not
     V = len(mdds)
     E = 0
     adj_matrix = [[0] * V for i in range(V)]
-    for i in range(V):
-        for j in range(V):
-            if i <= j:
-                continue
-            min_timestep = min(len(paths[i]), len(paths[j]))
-            temp_i, temp_j = i, j
-            if len(paths[i]) > len(paths[j]):
-                temp_i, temp_j = j, i
-            new_mdds = [mdds[temp_i], mdds[temp_j]]
-            new_agents = [temp_i, temp_j]
-            new_paths = [paths[temp_i], paths[temp_j]]
-            if not cardinal_conflict(new_mdds, new_agents, new_paths, min_timestep, constraints):
-                continue
-            adj_matrix[temp_i][temp_j] = 1
-            adj_matrix[temp_j][temp_i] = 1
-            E += 1
+    for c in collisions:
+        a1 = c['a1']
+        a2 = c['a2']
+        if len(paths[a1]) > len(paths[a2]):
+            a1, a2 = a2, a1
+        min_timestep = len(paths[a1])
+        conflict_mdds = [mdds[a1], mdds[a2]]
+        conflict_agents = [a1, a2]
+        conflict_paths = [paths[a1], paths[a2]]
+        if not cardinal_conflict(conflict_mdds, conflict_agents, conflict_paths, min_timestep, constraints):
+            continue
+        adj_matrix[a1][a2] = 1
+        adj_matrix[a2][a1] = 1
+        E += 1
     # for r in adj_matrix:
     #     print(r)
     min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
@@ -661,15 +661,15 @@ class CBSSolver(object):
         root['cost'] = get_sum_of_cost(root['paths'])
 
         # MDDs are sets to remove duplicates
-        master_mdds = [None] * self.num_of_agents
         master_mdds_length = [len(p) for p in root['paths']]
+        master_mdds = [None] * self.num_of_agents
 
         root_h_value = 0
         if cg_heuristics or dg_heuristics or wdg_heuristics:
             for i in range(self.num_of_agents):
                 master_mdds[i] = self.mdd(master_mdds_length[i], 0, i)
         if cg_heuristics:
-            root_h_value = max(root_h_value, cg_heuristic(master_mdds, root['paths'], root['constraints']))
+            root_h_value = max(root_h_value, cg_heuristic(master_mdds, root['paths'], root['constraints'], root['collisions']))
         if dg_heuristics:
             root_h_value = max(root_h_value, dg_heuristic(master_mdds, root['paths'], root['constraints']))
         # TODO: FIX PARAMETERS
@@ -740,14 +740,14 @@ class CBSSolver(object):
                 # Re-calculate the pairs if any agent has changed in path length
                 # mdd_pairs = [[0] * self.num_of_agents for i in range(self.num_of_agents)]
                 if cg_heuristics or dg_heuristics or wdg_heuristics:
+                    # Search for new mdd[i] of length new_mdds_length[i] and add it to master mdds
                     for i in range(self.num_of_agents):
-                        if master_mdds_length[i] >= new_mdds_length[i]:
+                        if new_mdds_length[i] <= master_mdds_length[i]:
                             continue
-                        # Search for new mdd[i] of length new_mdds_length[i] and add it to master mdds
-                        master_mdds[i] = master_mdds[i].union(self.mdd(new_mdds_length[i], master_mdds_length[i], i))
+                        master_mdds[i] = master_mdds[i] | self.mdd(new_mdds_length[i], master_mdds_length[i], i) # Set union
                         master_mdds_length[i] = new_mdds_length[i]
                 if cg_heuristics:
-                    h_value = max(h_value, cg_heuristic(master_mdds, new_node['paths'], new_node['constraints']))
+                    h_value = max(h_value, cg_heuristic(master_mdds, new_node['paths'], new_node['constraints'], new_node['collisions']))
                 if dg_heuristics:
                     h_value = max(h_value, dg_heuristic(master_mdds, new_node['paths'], new_node['constraints']))
                 # TODO: FIX PARAMETERS
