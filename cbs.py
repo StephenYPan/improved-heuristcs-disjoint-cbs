@@ -270,30 +270,39 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
     return new_mdd
 
 
-def joint_mdd(mdd1, mdd2, agent1, agent2, min_cost, constraints):
+def joint_mdd(mdds, agents, min_cost, constraints):
     """
     Merge two MDDs and return a decision tree.
     return True if solution exists, otherwise false.
     """
+    # print('agent:',agents[0], '\npath len:', len(paths[0]), '\npath:', paths[0], '\nconstraint:', constraint_list[0])
+    # for i in range(min_timestep):
+    #     print('t:',i,[e for t, e in new_mdds[0] if t == i])
+    # print()
+
+    # print('agent:',agents[1], '\npath len:', len(paths[1]), '\npath:', paths[1], '\nconstraint:', constraint_list[1])
+    # for i in range(min_timestep):
+    #     print('t:',i,[e for t, e in new_mdds[1] if t == i])
+    # print('\n')
     # mdd1 should be longer than mdd2
-    if mdd1[-1][0] < mdd2[-1][0]:
-        mdd1, mdd2 = mdd2, mdd1
+    mdd1_len = len(mdds[0])
+    mdd2_len = len(mdds[1])
 
-    joint_mdd_vertices = OrderedDict()
-    joint_mdd_edges = OrderedDict()
+    # joint_mdd_vertices = OrderedDict()
+    # joint_mdd_edges = OrderedDict()
 
-    root_vertex = (mdd1[0][1], mdd2[0][1])
-    joint_mdd_vertices[(0, root_vertex)] = 0
-    for cost1, (parent1, child1) in mdd1[1:]:
-        for cost2, (parent2, child2) in mdd2[1:]:
-            if cost1 < cost2:
-                break
-            if child1 == child2: # Conflict Vertex
-                continue
-            if (cost1 - 1, (parent1, parent2)) not in joint_mdd_vertices:
-                continue
-            joint_mdd_vertices[(cost1, (child1, child2))] = cost1
-            joint_mdd_edges[(cost1, ((parent1, child1), (parent2, child2)))] = cost1
+    # root_vertex = (mdd1[0][1], mdd2[0][1])
+    # joint_mdd_vertices[(0, root_vertex)] = 0
+    # for cost1, (parent1, child1) in mdd1[1:]:
+    #     for cost2, (parent2, child2) in mdd2[1:]:
+    #         if cost1 < cost2:
+    #             break
+    #         if child1 == child2: # Conflict Vertex
+    #             continue
+    #         if (cost1 - 1, (parent1, parent2)) not in joint_mdd_vertices:
+    #             continue
+    #         joint_mdd_vertices[(cost1, (child1, child2))] = cost1
+    #         joint_mdd_edges[(cost1, ((parent1, child1), (parent2, child2)))] = cost1
 
     # add remaining vertices and edges
     # remaining_cost = mdd2[-1][0]
@@ -342,16 +351,16 @@ def joint_mdd(mdd1, mdd2, agent1, agent2, min_cost, constraints):
     #         cur_cost = cost
     # print('cost:', cost, edge_list)
     # print('\n')
-    return mdd2[-1][0] == next(reversed(joint_mdd_vertices))[0]
+    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was tempered with'
+    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was tempered with'
+    return False
 
 
 def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     """
-    return true if there exists a cardinal conflict
-    mdds[0] is equal or shorter than mdds[1]
-    meaning, mdds[1]'s last layer may or maynot contain the solution.
-
-    python3 run_experiments.py --instance custominstances/exp3.txt --disjoint --solver CBS --batch --cg
+    return true if there exists a cardinal conflict, otherwise false.
+    mdds[0] is equal or shorter than mdds[1] meaning mdds[1]'s last layer 
+    may or maynot contain the solution.
     """
     mdd1_len = len(mdds[0])
     mdd2_len = len(mdds[1])
@@ -366,52 +375,22 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was tempered with'
     assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was tempered with'
 
-    print('agent:',agents[0], '\npath len:', len(paths[0]), '\npath:', paths[0], '\nconstraint:', constraint_list[0])
-    for i in range(min_timestep):
-        print('t:',i,[e for t, e in new_mdds[0] if t == i])
-    print()
-
-    print('agent:',agents[1], '\npath len:', len(paths[1]), '\npath:', paths[1], '\nconstraint:', constraint_list[1])
-    for i in range(min_timestep):
-        print('t:',i,[e for t, e in new_mdds[1] if t == i])
-    print('\n')
-
-    """
-    t: 0 [(0, 1)]
-    t: 1 [((0, 1), (0, 1)), ((0, 1), (0, 2)), ((0, 1), (1, 1))]
-    t: 2 [((1, 1), (2, 1))]
-    t: 3 [((2, 1), (2, 1)), ((2, 1), (2, 2))]
-    t: 4 [((2, 2), (3, 2))]
-
-    t: 0 [(1, 0)]
-    t: 1 [((1, 0), (1, 0)), ((1, 0), (2, 0))]
-    t: 2 [((1, 0), (1, 1)), ((1, 0), (2, 0)), ((2, 0), (2, 0))]
-    t: 3 [((1, 1), (1, 2)), ((1, 1), (2, 1)), ((1, 2), (1, 2)), ((1, 2), (2, 2)), ((2, 0), (2, 1))]
-    t: 4 [((1, 2), (2, 2)), ((2, 1), (2, 2)), ((2, 2), (2, 2)), ((2, 2), (2, 3))]
-    """
-
-    agent1_vertices = set()
-    agent2_vertices = set()
-    agent1_edges = set()
-    agent2_edges = set()
-    agent1_vertices.add(new_mdds[0][0][1])
-    agent2_vertices.add(new_mdds[1][0][1])
-
-    for t1, edge1 in new_mdds[0]:
-        for t2, edge2 in new_mdds[1]:
-            if t2 > t1:
-                break
+    for i in range(1, min_timestep):
+        agent1_edge = set([(v, u) for t, (u, v) in new_mdds[0] if t == i])
+        agent2_edge = set([e for t, e in new_mdds[1] if t == i])
+        agent1_vertex = set([e[0] for e in agent1_edge])
+        agent2_vertex = set([e[1] for e in agent2_edge])
+        if len(agent1_vertex) == 1 and len(agent2_vertex) == 1 and agent1_vertex == agent2_vertex:
+            return True
+        if len(agent1_edge) == 1 and len(agent2_edge) == 1 and agent1_edge == agent2_edge:
+            return True
     return False
 
 
 def cg_heuristic(mdds, paths, constraints, collisions):
     """
     Construct a conflict graph and calculate the minimum vertex cover
-
-    python3 run_experiments.py --instance custominstances/exp1.txt --disjoint --solver CBS --batch --cg
     """
-    # TODO: Speed up calculations
-    # We need to check if the conflict is cardinal or not
     V = len(mdds)
     E = 0
     adj_matrix = [[0] * V for i in range(V)]
@@ -429,10 +408,7 @@ def cg_heuristic(mdds, paths, constraints, collisions):
         adj_matrix[a1][a2] = 1
         adj_matrix[a2][a1] = 1
         E += 1
-    # for r in adj_matrix:
-    #     print(r)
     min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
-    # print(min_vertex_cover_value,'\n')
     return min_vertex_cover_value
 
 
