@@ -220,45 +220,56 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
 
 
 def reduce_mdd(mdd, path, min_timestep, constraints):
+    """
+    mdd is a reference to the master_mdds, must deep copy a new mdd if you want to mutate the list.
+    see: https://stackoverflow.com/questions/1207406/how-to-remove-items-from-a-list-while-iterating
+    """
     new_mdd = copy.deepcopy(mdd)
     goal_node = path[-1]
     goal_timestep = len(path) - 1
-
+    
     # Remove non-goal nodes only if the goal node is at path length
     if goal_timestep == min_timestep - 1:
-        for timestep, edge in mdd:
-            if timestep == goal_timestep and edge[1] != goal_node:
-                if (timestep, edge) in new_mdd:
-                    new_mdd.remove((timestep, edge))
+        last_edges = [(t, e) for t, e in new_mdd if t == goal_timestep]
+        for t, e in last_edges:
+            if e[1] != goal_node:
+                new_mdd.remove((t, e))
 
+    # Rewrite the below code
     for c in constraints:
-        for timestep, edge in mdd:
-            if timestep != c['timestep']:
-                continue
-            if len(c['loc']) == 2: # Remove edges
-                constraint_edge = tuple(c['loc'])
-                if c['positive'] and edge != constraint_edge:
-                    if (timestep, edge) in new_mdd:
-                        new_mdd.remove((timestep, edge))
-                elif not c['positive'] and edge == constraint_edge:
-                    if (timestep, edge) in new_mdd:
-                        new_mdd.remove((timestep, edge))
-            else: # Remove vertices and related child edges
-                constraint_vertex = c['loc'][0]
-                if c['positive'] and edge[1] != constraint_vertex:
-                    if (timestep, edge) in new_mdd:
-                        new_mdd.remove((timestep, edge))
-                    for t, e in mdd:
-                        if t - 1 == timestep and e[0] != constraint_vertex:
-                            if (t, e) in new_mdd:
-                                new_mdd.remove((t, e))
-                elif not c['positive'] and edge[1] == constraint_vertex:
-                    if (timestep, edge) in new_mdd:
-                        new_mdd.remove((timestep, edge))
-                    for t, e in mdd:
-                        if t - 1 == timestep and e[0] == constraint_vertex:
-                            if (t, e) in new_mdd:
-                                new_mdd.remove((t, e))
+        c_pos = c['positive']
+        c_timestep = c['timestep']
+        timestep_edges = [(t, e) for t, e in new_mdd if t == c_timestep]
+        if len(c['loc']) == 2: # Filter edges
+            c_edge = tuple(c['loc'])
+            for t, e in timestep_edges:
+                if c_pos and e != c_edge:
+                    new_mdd.remove((t, e))
+                if not c_pos and e == c_edge:
+                    new_mdd.remove((t, e))
+        else: # Filter vertices
+            c_vertex = c['loc'][0]
+            for t, e in timestep_edges:
+                if c_pos and e[1] != c_vertex:
+                    new_mdd.remove((t, e))
+                if not c_pos and e[1] == c_vertex:
+                    new_mdd.remove((t, e))
+                     
+    # Remove non-connecting edges
+    # Remove forward
+    for i in range(1, goal_timestep): 
+        cur_layer = set([e[1] for t, e in new_mdd if t == i])
+        next_layer = [(t, e) for t, e in new_mdd if t == i + 1]
+        for t, e in next_layer:
+            if e[0] not in cur_layer:
+                new_mdd.remove((t, e))
+    # Remove backward
+    for i in range(goal_timestep, 1, -1): 
+        cur_layer = set([e[0] for t, e in new_mdd if t == i])
+        prev_layer = [(t, e) for t, e in new_mdd if t == i - 1]
+        for t, e in prev_layer:
+            if e[1] not in cur_layer:
+                new_mdd.remove((t, e))
     return new_mdd
 
 
