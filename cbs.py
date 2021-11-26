@@ -234,7 +234,7 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
     return new_mdd
 
 
-def joint_dependency_diagram(mdds, agents, paths, min_timestep, constraints):
+def joint_dependency_diagram(joint_mdd, mdds, agents, paths, min_timestep, constraints):
     """
     Merge two MDDs and return a decision tree.
     return joint mdd and boolean. If dependent true, otherwise false.
@@ -249,18 +249,14 @@ def joint_dependency_diagram(mdds, agents, paths, min_timestep, constraints):
     #     print('t:',i,[e for t, e in new_mdds[1] if t == i])
     # print('\n')
 
-    mdd1_len = len(mdds[0])
-    mdd2_len = len(mdds[1])
-    constraint_list = [None, None]
-    new_mdds = [None, None]
-    for i in range(2):
+    num_of_mdds = len(mdds)
+    constraint_list = [None] * num_of_mdds
+    new_mdds = [None] * num_of_mdds
+    for i in range(num_of_mdds):
         constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
         new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
-    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was tempered with'
-    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was tempered with'
-
-    joint_mdd = None
+    new_joint_mdd = None
     # joint_mdd_vertices = OrderedDict()
     # joint_mdd_edges = OrderedDict()
 
@@ -387,7 +383,7 @@ def dg_heuristic(mdds, paths, constraints):
     """
     Constructs a adjacency matrix and returns the minimum vertex cover
     
-    python3 run_experiments.py --instance custominstances/exp2.txt --disjoint --solver CBS --batch --dg
+    python3 run_experiments.py --instance custominstances/exp2.txt --solver CBS --batch --disjoint --dg
     """
     V = len(mdds)
     E = 0
@@ -403,7 +399,7 @@ def dg_heuristic(mdds, paths, constraints):
         new_paths = [paths[a1], paths[a2]]
         min_timestep = len(paths[a1])
         # (conflict_mdds, conflict_agents, conflict_paths, min_timestep, constraints)
-        joint_mdd, dependency_list[j] = joint_dependency_diagram(new_mdds, agent_pair, new_paths, min_timestep, constraints)
+        joint_mdd, dependency_list[j] = joint_dependency_diagram(joint_mdd, new_mdds, agent_pair, new_paths, min_timestep, constraints)
 
     adj_matrix = [[0] * V for i in range(V)]
     # for dependency in dependency_list:
