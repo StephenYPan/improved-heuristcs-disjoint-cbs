@@ -330,18 +330,18 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     mdds[0] is equal or shorter than mdds[1] meaning mdds[1]'s last layer 
     may or maynot contain the solution.
     """
-    mdd1_len = len(mdds[0])
-    mdd2_len = len(mdds[1])
+    expected_mdd1_len = len(mdds[0])
+    expected_mdd2_len = len(mdds[1])
     constraint_list = [None, None]
     new_mdds = [None, None]
     for i in range(2):
         constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
         new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
-    assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was modified'
-    assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was modified'
+    assert (len(mdds[0]) == expected_mdd1_len) is True, f'original mdd for agent: {agents[0]} was modified'
+    assert (len(mdds[1]) == expected_mdd2_len) is True, f'original mdd for agent: {agents[1]} was modified'
+    # print(f'mdd time:    {timer.time() - start:.5f}')
 
-    start2 = timer.time()
     for i in range(1, min_timestep):
         agent1_edge = set([(v, u) for t, (u, v) in new_mdds[0] if t == i])
         agent2_edge = set([e for t, e in new_mdds[1] if t == i])
@@ -357,6 +357,12 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
 def cg_heuristic(mdds, paths, constraints, collisions):
     """
     Construct a conflict graph and calculate the minimum vertex cover
+
+    sanity check:
+    python3 run_experiments.py --instance "instances/test_*" --solver CBS --batch --disjoint --cg
+
+    optimization check:
+    python3 run_experiments.py --instance "instances/test_47.txt" --solver CBS --batch --disjoint --cg
     """
     V = len(mdds)
     E = 0
@@ -592,7 +598,8 @@ class CBSSolver(object):
 
         python3 run_experiments.py --instance custominstances/exp2.txt --disjoint --solver CBS --batch
         """
-        return increased_cost_tree_search(self.my_map, self.starts[agent], self.goals[agent], prev_path_len, cur_path_len, self.heuristics[agent])
+        return increased_cost_tree_search(self.my_map, self.starts[agent], self.goals[agent],
+            prev_path_len, cur_path_len, self.heuristics[agent])
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
         """ Finds paths for all agents from their start locations to their goal locations
@@ -720,11 +727,15 @@ class CBSSolver(object):
                     for i in range(self.num_of_agents):
                         if new_mdds_length[i] <= master_mdds_length[i]:
                             continue
-                        # start = timer.time()
+                        mdd_start = timer.time()
                         new_mdd = self.mdd(new_mdds_length[i], master_mdds_length[i], i)
                         master_mdds[i] = master_mdds[i] | new_mdd # Set union
-                        # end = timer.time() - start
-                        # print(f'agent: {i}, old-len: {master_mdds_length[i]:02}, new-len: {new_mdds_length[i]:02}, find time: {end:.2f}')
+                        mdd_end = timer.time() - mdd_start
+                        for c in [c for c in new_node['constraints'] if c['agent'] == i]:
+                            print(c)
+                        print(f'old-path:', cur_node['paths'][i])
+                        print(f'new-path:', new_node['paths'][i])
+                        print(f'agent: {i}, path len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mdd_end:.2f}\n')
                         master_mdds_length[i] = new_mdds_length[i]
                     self.mdd_time += timer.time() - mdd_start
                 heuristics_start = timer.time()
