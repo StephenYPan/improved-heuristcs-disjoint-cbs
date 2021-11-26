@@ -182,17 +182,12 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
 
 def reduce_mdd(mdd, path, min_timestep, constraints):
     """
-    mdd is a reference to the master_mdds, a shallow copy is needed if you want to mutate the list.
+    mdd is a reference to the master mdd, a shallow copy is needed if you want to mutate the list.
     see :https://stackoverflow.com/questions/58015774/remove-is-removing-elements-from-both-variables-lists-which-i-set-equal-to
     see: https://stackoverflow.com/questions/1207406/how-to-remove-items-from-a-list-while-iterating
     """
-    mdd_len = len(mdd)
-    start1 = timer.time()
+    expected_mdd_len = len(mdd)
     new_mdd = mdd.copy()
-    end1 = timer.time()
-    print(f'copy time:     {end1 - start1:.5f}')
-
-    start2 = timer.time()
     # Remove non-goal nodes iff the goal node is at min timestep
     if len(path) == min_timestep:
         last_edges = [(t, e) for t, e in new_mdd if t == min_timestep - 1]
@@ -238,10 +233,7 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
         for t, e in next_layer:
             if e[0] not in cur_layer:
                 new_mdd.remove((t, e))
-    assert (mdd_len == len(mdd)) is True, f'original mdd was modified'
-    end2 = timer.time()
-    print(f'filter time:   {end2 - start2:.5f}')
-    print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n')
+    assert (len(mdd) == expected_mdd_len) is True, f'original mdd was modified'
     return new_mdd
 
 
@@ -340,7 +332,6 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     mdds[0] is equal or shorter than mdds[1] meaning mdds[1]'s last layer 
     may or maynot contain the solution.
     """
-    print(f'cardinal conflict computation time')
     start1 = timer.time()
     mdd1_len = len(mdds[0])
     mdd2_len = len(mdds[1])
@@ -364,16 +355,16 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         if max(len(agent1_vertex), len(agent2_vertex)) == 1 and agent1_vertex == agent2_vertex:
             end2 = timer.time()
             print(f'cardinal time: {end2 - start2:.5f}')
-            print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n\n')
+            print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n')
             return True
         if max(len(agent1_edge), len(agent2_edge)) == 1 and agent1_edge == agent2_edge:
             end2 = timer.time()
             print(f'cardinal time: {end2 - start2:.5f}')
-            print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n\n')
+            print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n')
             return True
     end2 = timer.time()
     print(f'cardinal time: {end2 - start2:.5f}')
-    print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n\n')
+    print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n')
     return False
 
 
