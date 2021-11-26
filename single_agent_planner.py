@@ -227,4 +227,5 @@ def increased_cost_tree_search(my_map, start_loc, goal_loc, min_path_cost, max_p
             }
             node_id += 1
             heapq.heappush(open_list, (child['g_val'] + child['h_val'], child['h_val'], node_id, child))
+    print(f'nodes expanded: {node_id:10}')
     return ict

@@ -727,16 +727,21 @@ class CBSSolver(object):
                     for i in range(self.num_of_agents):
                         if new_mdds_length[i] <= master_mdds_length[i]:
                             continue
-                        mdd_start = timer.time()
+                        mddi_start = timer.time()
                         new_mdd = self.mdd(new_mdds_length[i], master_mdds_length[i], i)
                         master_mdds[i] = master_mdds[i] | new_mdd # Set union
-                        mdd_end = timer.time() - mdd_start
-                        for c in [c for c in new_node['constraints'] if c['agent'] == i]:
-                            print(c)
-                        print(f'old-path:', cur_node['paths'][i])
-                        print(f'new-path:', new_node['paths'][i])
-                        print(f'agent: {i}, path len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mdd_end:.2f}\n')
+                        mddi_end = timer.time() - mddi_start
                         master_mdds_length[i] = new_mdds_length[i]
+                        if mddi_end > 1:
+                            print('constraints:')
+                            for c in new_node['constraints']:
+                                print(c)
+                            print('collisions:')
+                            for c in new_node['collisions']:
+                                print(c)
+                            print(f'old-path:', cur_node['paths'][i])
+                            print(f'new-path:', new_node['paths'][i])
+                            print(f'agent: {i}, path len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mddi_end:.2f}\n')
                     self.mdd_time += timer.time() - mdd_start
                 heuristics_start = timer.time()
                 if cg_heuristics:
@@ -749,7 +754,9 @@ class CBSSolver(object):
                 if not (cg_heuristics or dg_heuristics or wdg_heuristics):
                     h_value = len(new_node['collisions'])
                 new_node['h_value'] = h_value
-                self.heuristics_time  += timer.time() - heuristics_start
+                heuristics_end = timer.time() - heuristics_start
+                self.heuristics_time  += heuristics_end
+
 
                 self.push_node(new_node)
 
@@ -758,6 +765,8 @@ class CBSSolver(object):
 
     def print_results(self, node):
         # print("\n Found a solution! \n")
+        for i in range(self.num_of_agents):
+            print('agent:', i, node['paths'][i])
         print()
         self.CPU_time = timer.time() - self.start_time
         paths = node['paths']
