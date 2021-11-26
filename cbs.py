@@ -182,10 +182,17 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
 
 def reduce_mdd(mdd, path, min_timestep, constraints):
     """
-    mdd is a reference to the master_mdds, must deep copy a new mdd if you want to mutate the list.
+    mdd is a reference to the master_mdds, a shallow copy is needed if you want to mutate the list.
+    see :https://stackoverflow.com/questions/58015774/remove-is-removing-elements-from-both-variables-lists-which-i-set-equal-to
     see: https://stackoverflow.com/questions/1207406/how-to-remove-items-from-a-list-while-iterating
     """
-    new_mdd = copy.deepcopy(mdd)
+    mdd_len = len(mdd)
+    start1 = timer.time()
+    new_mdd = mdd.copy()
+    end1 = timer.time()
+    print(f'copy time:     {end1 - start1:.5f}')
+
+    start2 = timer.time()
     # Remove non-goal nodes iff the goal node is at min timestep
     if len(path) == min_timestep:
         last_edges = [(t, e) for t, e in new_mdd if t == min_timestep - 1]
@@ -231,6 +238,10 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
         for t, e in next_layer:
             if e[0] not in cur_layer:
                 new_mdd.remove((t, e))
+    assert (mdd_len == len(mdd)) is True, f'original mdd was modified'
+    end2 = timer.time()
+    print(f'filter time:   {end2 - start2:.5f}')
+    print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n')
     return new_mdd
 
 
@@ -329,6 +340,8 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     mdds[0] is equal or shorter than mdds[1] meaning mdds[1]'s last layer 
     may or maynot contain the solution.
     """
+    print(f'cardinal conflict computation time')
+    start1 = timer.time()
     mdd1_len = len(mdds[0])
     mdd2_len = len(mdds[1])
     constraint_list = [None, None]
@@ -339,16 +352,28 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
     assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was modified'
     assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was modified'
+    end1 = timer.time()
+    print(f'mdd time:      {end1 - start1:.5f}')
 
+    start2 = timer.time()
     for i in range(1, min_timestep):
         agent1_edge = set([(v, u) for t, (u, v) in new_mdds[0] if t == i])
         agent2_edge = set([e for t, e in new_mdds[1] if t == i])
         agent1_vertex = set([e[0] for e in agent1_edge])
         agent2_vertex = set([e[1] for e in agent2_edge])
-        if len(agent1_vertex) == 1 and len(agent2_vertex) == 1 and agent1_vertex == agent2_vertex:
+        if max(len(agent1_vertex), len(agent2_vertex)) == 1 and agent1_vertex == agent2_vertex:
+            end2 = timer.time()
+            print(f'cardinal time: {end2 - start2:.5f}')
+            print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n\n')
             return True
-        if len(agent1_edge) == 1 and len(agent2_edge) == 1 and agent1_edge == agent2_edge:
+        if max(len(agent1_edge), len(agent2_edge)) == 1 and agent1_edge == agent2_edge:
+            end2 = timer.time()
+            print(f'cardinal time: {end2 - start2:.5f}')
+            print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n\n')
             return True
+    end2 = timer.time()
+    print(f'cardinal time: {end2 - start2:.5f}')
+    print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n\n')
     return False
 
 
@@ -654,7 +679,7 @@ class CBSSolver(object):
         self.heuristics_time  += timer.time() - heuristics_start
 
         self.push_node(root)
-        
+
         while self.open_list:
             cur_node = self.pop_node()
             if not cur_node['collisions']: # Goal reached
