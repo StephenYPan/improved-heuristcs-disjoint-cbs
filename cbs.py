@@ -535,6 +535,8 @@ class CBSSolver(object):
         self.num_of_generated = 0
         self.num_of_expanded = 0
         self.CPU_time = 0
+        self.heuristics_time = 0
+        self.mdd_time = 0
 
         self.open_list = []
 
@@ -638,8 +640,11 @@ class CBSSolver(object):
 
         root_h_value = 0
         if cg_heuristics or dg_heuristics or wdg_heuristics:
+            mdd_start = timer.time()
             for i in range(self.num_of_agents):
                 master_mdds[i] = self.mdd(master_mdds_length[i], 0, i)
+            self.mdd_time += timer.time() - mdd_start
+        heuristics_start = timer.time()
         if cg_heuristics:
             root_h_value = max(root_h_value, cg_heuristic(master_mdds, root['paths'], root['constraints'], root['collisions']))
         if dg_heuristics:
@@ -650,8 +655,10 @@ class CBSSolver(object):
         if not (cg_heuristics or dg_heuristics or wdg_heuristics):
             h_value = len(root['collisions'])
         root['h_value'] = root_h_value
-        self.push_node(root)
+        self.heuristics_time  += timer.time() - heuristics_start
 
+        self.push_node(root)
+        
         while self.open_list:
             cur_node = self.pop_node()
             if not cur_node['collisions']: # Goal reached
@@ -711,15 +718,18 @@ class CBSSolver(object):
                 # mdd_pairs = [[0] * self.num_of_agents for i in range(self.num_of_agents)]
                 if cg_heuristics or dg_heuristics or wdg_heuristics:
                     # Search for new mdd[i] of length new_mdds_length[i] and add it to master mdds
+                    mdd_start = timer.time()
                     for i in range(self.num_of_agents):
                         if new_mdds_length[i] <= master_mdds_length[i]:
                             continue
-                        start = timer.time()
+                        # start = timer.time()
                         new_mdd = self.mdd(new_mdds_length[i], master_mdds_length[i], i)
                         master_mdds[i] = master_mdds[i] | new_mdd # Set union
-                        end = timer.time() - start
-                        print(f'agent: {i}, old-len: {master_mdds_length[i]:02}, new-len: {new_mdds_length[i]:02}, find time: {end:.2f}')
+                        # end = timer.time() - start
+                        # print(f'agent: {i}, old-len: {master_mdds_length[i]:02}, new-len: {new_mdds_length[i]:02}, find time: {end:.2f}')
                         master_mdds_length[i] = new_mdds_length[i]
+                    self.mdd_time += timer.time() - mdd_start
+                heuristics_start = timer.time()
                 if cg_heuristics:
                     h_value = max(h_value, cg_heuristic(master_mdds, new_node['paths'], new_node['constraints'], new_node['collisions']))
                 if dg_heuristics:
@@ -730,6 +740,7 @@ class CBSSolver(object):
                 if not (cg_heuristics or dg_heuristics or wdg_heuristics):
                     h_value = len(new_node['collisions'])
                 new_node['h_value'] = h_value
+                self.heuristics_time  += timer.time() - heuristics_start
 
                 self.push_node(new_node)
 
@@ -738,9 +749,18 @@ class CBSSolver(object):
 
     def print_results(self, node):
         # print("\n Found a solution! \n")
-        CPU_time = timer.time() - self.start_time
-        print("CPU time (s):    {:.2f}".format(CPU_time))
-        print("Sum of costs:    {}".format(get_sum_of_cost(node['paths'])))
-        print("Expanded nodes:  {}".format(self.num_of_expanded))
-        print("Generated nodes: {}".format(self.num_of_generated))
+        print()
+        self.CPU_time = timer.time() - self.start_time
+        paths = node['paths']
+        total_overhead = self.heuristics_time + self.mdd_time
+        search_time = self.CPU_time - total_overhead
+        overhead_ratio = total_overhead / (self.CPU_time - total_overhead)
+        print(f'CPU time (s):    {self.CPU_time:.2f}')
+        print(f'Search time:     {search_time:.2f}')
+        print(f'Heuristics time: {self.heuristics_time:.2f}')
+        print(f'MDDs time:       {self.mdd_time:.2f}')
+        print(f'Overhead Ratio:  {overhead_ratio:.2f}')
+        print(f'Sum of costs:    {get_sum_of_cost(paths)}')
+        print(f'Expanded nodes:  {self.num_of_expanded}')
+        print(f'Generated nodes: {self.num_of_generated}')
         print()

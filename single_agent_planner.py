@@ -151,7 +151,7 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
                 continue
             if my_map[child_loc[0]][child_loc[1]]:
                 continue
-            if child_timestep > latest_goal_timestep:
+            if child_timestep + h_values[child_loc] > latest_goal_timestep: # Unable to reach goal
                 continue
             if is_constrained(cur['loc'], child_loc, child_timestep, neg_constraint_table):
                 continue
@@ -211,8 +211,6 @@ def increased_cost_tree_search(my_map, start_loc, goal_loc, min_path_cost, max_p
                 or child_loc[1] < 0 or child_loc[1] >= len(my_map[0]) :
                 continue
             if my_map[child_loc[0]][child_loc[1]]:
-                continue
-            if child_timestep >= max_path_cost:
                 continue
             if child_timestep + h_values[child_loc] >= max_path_cost: # impossible to reach goal given the max cost
                 continue
