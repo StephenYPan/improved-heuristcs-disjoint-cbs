@@ -1,8 +1,6 @@
 from logging import raiseExceptions
-from collections import OrderedDict
 from os import times
 import time as timer
-import copy
 import heapq
 import random
 
@@ -233,7 +231,7 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
         for t, e in next_layer:
             if e[0] not in cur_layer:
                 new_mdd.remove((t, e))
-    assert (len(mdd) == expected_mdd_len) is True, f'original mdd was modified'
+    assert (len(mdd) == expected_mdd_len) is True, f'original mdd was modified while filtering'
     return new_mdd
 
 
@@ -332,7 +330,6 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     mdds[0] is equal or shorter than mdds[1] meaning mdds[1]'s last layer 
     may or maynot contain the solution.
     """
-    start1 = timer.time()
     mdd1_len = len(mdds[0])
     mdd2_len = len(mdds[1])
     constraint_list = [None, None]
@@ -343,8 +340,6 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
     assert (mdd1_len == len(mdds[0])) is True, f'original mdd for agent: {agents[0]} was modified'
     assert (mdd2_len == len(mdds[1])) is True, f'original mdd for agent: {agents[1]} was modified'
-    end1 = timer.time()
-    print(f'mdd time:      {end1 - start1:.5f}')
 
     start2 = timer.time()
     for i in range(1, min_timestep):
@@ -353,18 +348,9 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         agent1_vertex = set([e[0] for e in agent1_edge])
         agent2_vertex = set([e[1] for e in agent2_edge])
         if max(len(agent1_vertex), len(agent2_vertex)) == 1 and agent1_vertex == agent2_vertex:
-            end2 = timer.time()
-            print(f'cardinal time: {end2 - start2:.5f}')
-            print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n')
             return True
         if max(len(agent1_edge), len(agent2_edge)) == 1 and agent1_edge == agent2_edge:
-            end2 = timer.time()
-            print(f'cardinal time: {end2 - start2:.5f}')
-            print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n')
             return True
-    end2 = timer.time()
-    print(f'cardinal time: {end2 - start2:.5f}')
-    print(f'ratio:         {(end1 - start1) / (end2 - start2):7.2f}\n')
     return False
 
 
