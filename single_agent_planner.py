@@ -177,12 +177,14 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
     return None  # Failed to find solutions
 
 
-def increased_cost_tree_search(my_map, start_loc, goal_loc, min_path_cost, max_path_cost, h_values):
+def increased_cost_tree_search(my_map, start_loc, goal_loc, min_path_cost, max_path_cost, h_values, agent, constraints):
     """ 
     A* search
     Returns a set of all possible edges
     [min_path_cost, max_path_cost)
     """
+    neg_constraint_table, pos_constraint_table = build_constraint_table(constraints, agent)
+
     ict = set()
     ict.add((0, start_loc))
     
@@ -213,6 +215,11 @@ def increased_cost_tree_search(my_map, start_loc, goal_loc, min_path_cost, max_p
             if my_map[child_loc[0]][child_loc[1]]:
                 continue
             if child_timestep + h_values[child_loc] >= max_path_cost: # impossible to reach goal given the max cost
+                continue
+            if is_constrained(cur['loc'], child_loc, child_timestep, neg_constraint_table):
+                continue
+            if child_timestep in pos_constraint_table \
+                and not is_pos_constraint(cur['loc'], child_loc, child_timestep, pos_constraint_table):
                 continue
             child = {
                 'loc': child_loc,
