@@ -296,17 +296,17 @@ def custom_increased_cost_tree_search(my_map, start_loc, min_path_cost, max_path
         python3 run_experiments.py --instance "subsetinstances/test_42.txt" --solver CBS --batch --disjoint --cg
     """
     start_time = timer.time()
-    ict_edges = set()
+    ict = set()
     if min_path_cost == 0:
-        ict_edges.add((0, start_loc))
+        ict.add((0, start_loc))
     lower_h_values = [(min_path_cost, k) for k, v in h_values.items() if v < min_path_cost]
     upper_h_values = [(v, k) for k, v in h_values.items() if v >= min_path_cost]
-    new_h_values_from_start =  lower_h_values + upper_h_values
+    new_h_values =  lower_h_values + upper_h_values
 
     for i in range(min_path_cost, max_path_cost):
-        lower_list = [(t, v) for t, v in new_h_values_from_start if t == i]
-        upper_list = [(t, v) for t, v in new_h_values_from_start if t > i]
-        new_h_values_from_start = upper_list + [(t + 1, v) for t, v in lower_list]
+        lower_list = [(t, v) for t, v in new_h_values if t == i]
+        upper_list = [(t, v) for t, v in new_h_values if t > i]
+        new_h_values = upper_list + [(t + 1, v) for t, v in lower_list]
         for t, v in lower_list:
             for direction in range(5):
                 next_v = move(v, direction)
@@ -316,6 +316,6 @@ def custom_increased_cost_tree_search(my_map, start_loc, min_path_cost, max_path
                     continue
                 if my_map[next_v[0]][next_v[1]]:
                     continue
-                ict_edges.add((t + 1, (v, next_v)))
+                ict.add((t + 1, (v, next_v)))
     # print(f'matrix ver. time: {timer.time() - start_time:.6f}')
-    return ict_edges
+    return ict
