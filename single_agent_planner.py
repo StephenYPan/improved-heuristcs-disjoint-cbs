@@ -7,6 +7,12 @@ def move(loc, dir):
     return loc[0] + directions[dir][0], loc[1] + directions[dir][1]
 
 
+def is_invalid_move(my_map, move):
+    return move[0] < 0 or move[0] >= len(my_map) \
+        or move[1] < 0 or move[1] >= len(my_map[0]) \
+        or my_map[move[0]][move[1]]
+
+
 def get_sum_of_cost(paths):
     rst = 0
     for path in paths:
@@ -26,11 +32,13 @@ def compute_heuristics(my_map, goal):
         for dir in range(4):
             child_loc = move(loc, dir)
             child_cost = cost + 1
-            if child_loc[0] < 0 or child_loc[0] >= len(my_map) \
-               or child_loc[1] < 0 or child_loc[1] >= len(my_map[0]):
-               continue
-            if my_map[child_loc[0]][child_loc[1]]:
+            if is_invalid_move(my_map, child_loc):
                 continue
+            # if child_loc[0] < 0 or child_loc[0] >= len(my_map) \
+            #    or child_loc[1] < 0 or child_loc[1] >= len(my_map[0]):
+            #    continue
+            # if my_map[child_loc[0]][child_loc[1]]:
+            #     continue
             child = {'loc': child_loc, 'cost': child_cost}
             if child_loc in closed_list:
                 existing_node = closed_list[child_loc]
@@ -147,10 +155,7 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
         for direction in range(5):
             child_loc = move(cur['loc'], direction)
             child_timestep = cur['timestep'] + 1
-            if child_loc[0] < 0 or child_loc[0] >= len(my_map) \
-                or child_loc[1] < 0 or child_loc[1] >= len(my_map[0]) :
-                continue
-            if my_map[child_loc[0]][child_loc[1]]:
+            if is_invalid_move(my_map, child_loc):
                 continue
             if child_timestep + h_values[child_loc] > latest_goal_timestep: # Unable to reach goal
                 continue
@@ -247,19 +252,14 @@ def increased_cost_tree_search(my_map, start_loc, max_path_cost, start_h_values,
     ict = set()
     ict.add((0, start_loc))
 
-    viable_locations = [(h, v) for v, h in start_h_values.items() if h + goal_h_values[v] < max_path_cost]
+    viable_locations = [(v, h) for v, h in start_h_values.items() if h + goal_h_values[v] < max_path_cost]
     for t in range(max_path_cost):
-        cur_locations = [v for h, v in viable_locations if h <= t]
+        cur_locations = [v for v, h in viable_locations if h <= t]
         for v in cur_locations:
             for direction in range(5):
                 next_v = move(v, direction)
                 next_t = t + 1
-                # Checks if the next vertex is inside the map
-                if next_v[0] < 0 or next_v[0] >= len(my_map) \
-                    or next_v[1] < 0 or next_v[1] >= len(my_map[0]) :
-                    continue
-                # Checks if the next vertex is an obstacle
-                if my_map[next_v[0]][next_v[1]]:
+                if is_invalid_move(my_map, next_v):
                     continue
                 # Check if the next vertex can reach the goal
                 if next_t + goal_h_values[(next_v)] >= max_path_cost:
@@ -287,23 +287,20 @@ def custom_increased_cost_tree_search(my_map, start_loc, min_path_cost, max_path
     ict = set()
     if min_path_cost == 0:
         ict.add((0, start_loc))
-    lower_h_values = [(min_path_cost, k) for k, v in start_h_values.items() if v < min_path_cost]
-    upper_h_values = [(v, k) for k, v in start_h_values.items() if v >= min_path_cost]
+    lower_h_values = [(k, min_path_cost) for k, v in start_h_values.items() if v < min_path_cost]
+    upper_h_values = [(k, v) for k, v in start_h_values.items() if v >= min_path_cost]
     new_h_values =  lower_h_values + upper_h_values
 
     for i in range(min_path_cost, max_path_cost):
-        lower_list = [(t, v) for t, v in new_h_values if t == i]
-        upper_list = [(t, v) for t, v in new_h_values if t > i]
-        new_h_values = upper_list + [(t + 1, v) for t, v in lower_list]
-        for t, v in lower_list:
+        lower_list = [(v, t) for v, t in new_h_values if t == i]
+        upper_list = [(v, t) for v, t in new_h_values if t > i]
+        new_h_values = upper_list + [(v, t + 1) for v, t in lower_list]
+        for v, t in lower_list:
             for direction in range(5):
                 next_v = move(v, direction)
-                # invalid moves
-                if next_v[0] < 0 or next_v[0] >= len(my_map) \
-                    or next_v[1] < 0 or next_v[1] >= len(my_map[0]) :
+                next_t = t + 1
+                if is_invalid_move(my_map, next_v):
                     continue
-                if my_map[next_v[0]][next_v[1]]:
-                    continue
-                ict.add((t + 1, (v, next_v)))
+                ict.add((next_t, (v, next_v)))
     # print(f'matrix ver. time: {timer.time() - start_time:.6f}')
     return ict
