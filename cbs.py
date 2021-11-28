@@ -677,8 +677,9 @@ class CBSSolver(object):
             cur_node = self.pop_node()
             if not cur_node['collisions']: # Goal reached
                 if self.stats:
-                    for i in range(self.num_of_agents):
-                        print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
+                    if cg_heuristics or dg_heuristics or wdg_heuristics:
+                        for i in range(self.num_of_agents):
+                            print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
                     self.print_results(cur_node)
                 return cur_node['paths']
             # TODO: Implement ICBS
@@ -742,7 +743,7 @@ class CBSSolver(object):
                         mddi_start = timer.time()
                         new_mdd = self.mdd(new_mdds_length[i], i, master_h_values[i])
                         # new_mdd = self.custom_mdd(master_mdds_length[i], new_mdds_length[i], i, master_h_values[i])
-                        master_mdds[i] = new_mdd # Set union
+                        master_mdds[i] = master_mdds[i] | new_mdd # Set union
                         mddi_end = timer.time() - mddi_start
                         # print(f'agent-{i}, len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mddi_end:.5f}')
                         # print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
