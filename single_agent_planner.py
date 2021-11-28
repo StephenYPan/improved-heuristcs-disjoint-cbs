@@ -283,7 +283,6 @@ def custom_increased_cost_tree_search(my_map, start_loc, min_path_cost, max_path
         sanity check:
         python3 run_experiments.py --instance "subsetinstances/test_1.txt" --solver CBS --batch --disjoint --cg
     """
-    # TODO: How to reduce the size of the MDD?
     start_time = timer.time()
     ict = set()
     if min_path_cost == 0:

@@ -742,8 +742,8 @@ class CBSSolver(object):
                         # new_mdd = self.custom_mdd(master_mdds_length[i], new_mdds_length[i], i, master_h_values[i])
                         master_mdds[i] = new_mdd # Set union
                         mddi_end = timer.time() - mddi_start
-                        # print(f'agent-{i}, path len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mddi_end:.5f}')
-                        print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
+                        print(f'agent-{i}, path len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mddi_end:.5f}')
+                        # print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
                         master_mdds_length[i] = new_mdds_length[i]
                     self.mdd_time += timer.time() - mdd_start
 
@@ -784,4 +784,3 @@ class CBSSolver(object):
         print(f'Sum of costs:    {get_sum_of_cost(paths)}')
         print(f'Expanded nodes:  {self.num_of_expanded}')
         print(f'Generated nodes: {self.num_of_generated}')
-        print()
