@@ -779,9 +779,9 @@ class CBSSolver(object):
         search_time = self.CPU_time - total_overhead
         overhead_ratio = total_overhead / search_time
         print(f'CPU time (s):    {self.CPU_time:.2f}')
-        print(f'Search time:     {search_time:.2f}')
-        print(f'Heuristics time: {self.heuristics_time:.2f}')
-        print(f'MDDs time:       {self.mdd_time:.2f}')
+        print(f'Search time:     {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
+        print(f'Heuristics time: {self.heuristics_time:.2f} ({self.heuristics_time / self.CPU_time * 100:05.2f}%)')
+        print(f'MDDs time:       {self.mdd_time:.2f} ({self.mdd_time / self.CPU_time * 100:05.2f}%)')
         print(f'Overhead Ratio:  {overhead_ratio:.2f}x')
         print(f'Sum of costs:    {get_sum_of_cost(paths)}')
         print(f'Expanded nodes:  {self.num_of_expanded}')
