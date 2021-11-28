@@ -4,7 +4,7 @@ import time as timer
 import heapq
 import random
 
-from single_agent_planner import compute_heuristics, a_star, custom_increased_cost_tree_search, get_location, get_sum_of_cost, pop_node, increased_cost_tree_search
+from single_agent_planner import compute_heuristics, a_star, get_location, get_sum_of_cost, pop_node, increased_cost_tree_search, custom_increased_cost_tree_search
 
 
 def detect_collision(path1, path2):
@@ -340,7 +340,6 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
         new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
     assert (len(mdds[0]) == expected_mdd1_len) is True, f'original mdd for agent: {agents[0]} was modified'
     assert (len(mdds[1]) == expected_mdd2_len) is True, f'original mdd for agent: {agents[1]} was modified'
-    # print(f'mdd time:    {timer.time() - start:.5f}')
 
     for i in range(1, min_timestep):
         agent1_edge = set([(v, u) for t, (u, v) in new_mdds[0] if t == i])
@@ -592,18 +591,18 @@ class CBSSolver(object):
                 right = mid
         self.open_list = self.open_list[0:right]
 
-    def mdd(self, prev_path_len, cur_path_len, agent):
+    def mdd(self, cur_path_len, agent, start_h_values):
         """
         Find the MDD for an agent
 
         python3 run_experiments.py --instance custominstances/exp2.txt --disjoint --solver CBS --batch
         """
-        return increased_cost_tree_search(self.my_map, self.starts[agent], self.goals[agent],
-            prev_path_len, cur_path_len, self.heuristics[agent])
+        return increased_cost_tree_search(self.my_map, self.starts[agent], cur_path_len,
+            start_h_values, self.heuristics[agent])
     
-    def custom_mdd(self, prev_path_len, cur_path_len, agent, mdd_h_values):
+    def custom_mdd(self, prev_path_len, cur_path_len, agent, start_h_values):
         return custom_increased_cost_tree_search(self.my_map, self.starts[agent],
-            prev_path_len, cur_path_len, mdd_h_values)
+            prev_path_len, cur_path_len, start_h_values)
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
         """ Finds paths for all agents from their start locations to their goal locations
@@ -653,8 +652,11 @@ class CBSSolver(object):
             mdd_start = timer.time()
             for i in range(self.num_of_agents):
                 master_h_values[i] = compute_heuristics(self.my_map, self.starts[i])
-                # master_mdds[i] = self.mdd(0, master_mdds_length[i], i)
-                master_mdds[i] = self.custom_mdd(0, master_mdds_length[i], i, master_h_values[i])
+                master_mdds[i] = self.mdd(master_mdds_length[i], i, master_h_values[i])
+                # master_mdds[i] = self.custom_mdd(0, master_mdds_length[i], i, master_h_values[i])
+                print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
+                # print([(t, e) for t, e in master_mdds[i] if t == master_mdds_length[i] - 1 and e[1] == self.goals[i]])
+            print()
             self.mdd_time += timer.time() - mdd_start
         heuristics_start = timer.time()
         if cg_heuristics:
@@ -677,6 +679,7 @@ class CBSSolver(object):
                 if self.stats:
                     self.print_results(cur_node)
                 return cur_node['paths']
+            # TODO: Implement ICBS
             collision = cur_node['collisions'][0]
             constraints = disjoint_splitting(collision) if disjoint else standard_splitting(collision)
             for constraint in constraints:
@@ -735,13 +738,15 @@ class CBSSolver(object):
                         if new_mdds_length[i] <= master_mdds_length[i]:
                             continue
                         mddi_start = timer.time()
-                        # new_mdd = self.mdd(master_mdds_length[i], new_mdds_length[i], i)
-                        new_mdd = self.custom_mdd(master_mdds_length[i], new_mdds_length[i], i, master_h_values[i])
-                        master_mdds[i] = master_mdds[i] | new_mdd # Set union
+                        new_mdd = self.mdd(new_mdds_length[i], i, master_h_values[i])
+                        # new_mdd = self.custom_mdd(master_mdds_length[i], new_mdds_length[i], i, master_h_values[i])
+                        master_mdds[i] = new_mdd # Set union
                         mddi_end = timer.time() - mddi_start
-                        print(f'agent: {i}, path len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mddi_end:.5f}')
+                        # print(f'agent-{i}, path len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mddi_end:.5f}')
+                        print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
                         master_mdds_length[i] = new_mdds_length[i]
                     self.mdd_time += timer.time() - mdd_start
+
                 heuristics_start = timer.time()
                 if cg_heuristics:
                     h_value = max(h_value, cg_heuristic(master_mdds, new_node['paths'], new_node['constraints'], new_node['collisions']))
@@ -753,9 +758,8 @@ class CBSSolver(object):
                 if not (cg_heuristics or dg_heuristics or wdg_heuristics):
                     h_value = len(new_node['collisions'])
                 new_node['h_value'] = h_value
-                heuristics_end = timer.time() - heuristics_start
-                self.heuristics_time  += heuristics_end
-
+                self.heuristics_time  += timer.time() - heuristics_start
+                # print(f'{self.heuristics_time:.2f}')
 
                 self.push_node(new_node)
 
@@ -765,7 +769,7 @@ class CBSSolver(object):
     def print_results(self, node):
         # print("\n Found a solution! \n")
         # for i in range(self.num_of_agents):
-        #     print('agent:', i, node['paths'][i])
+        #     print('agent:', i, 'path len:', len(node['paths'][i]), node['paths'][i])
         # print()
         self.CPU_time = timer.time() - self.start_time
         paths = node['paths']
