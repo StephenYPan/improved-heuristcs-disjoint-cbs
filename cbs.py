@@ -178,69 +178,6 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
-def reduce_mdd(mdd, path, min_timestep, constraints):
-    """
-    mdd is a reference to the master mdd, a shallow copy is needed if you want to mutate the list.
-    see :https://stackoverflow.com/questions/58015774/remove-is-removing-elements-from-both-variables-lists-which-i-set-equal-to
-    see: https://stackoverflow.com/questions/1207406/how-to-remove-items-from-a-list-while-iterating
-    """
-    start_timer = timer.time()
-    expected_mdd_len = len(mdd)
-    new_mdd = mdd.copy()
-    # Remove non-goal nodes iff the goal node is at min timestep
-    if len(path) == min_timestep:
-        last_edges = [(t, e) for t, e in new_mdd if t == min_timestep - 1]
-        for t, e in last_edges:
-            if e[1] == path[-1]:
-                continue
-            new_mdd.remove((t, e))
-        assert (len([(t, e) for t, e in new_mdd if t == min_timestep - 1]) <= 5) is True, \
-            f'mdd contains invalid edges for agent with start: {path[0]}, goal: {path[-1]} mdd result: {[(t, e) for t, e in new_mdd if t == min_timestep - 1]}'
-    for c in constraints:
-        c_pos = c['positive']
-        cur_timestep = [(t, e) for t, e in new_mdd if t == c['timestep']]
-        if len(c['loc']) == 1: # Filter vertices
-            c_vertex = c['loc'][0]
-            for t, e in cur_timestep:
-                if c_pos and e[1] != c_vertex:
-                    new_mdd.remove((t, e))
-                if not c_pos and e[1] == c_vertex:
-                    new_mdd.remove((t, e))
-            # Remove vertices in next timestep that cannot exist
-            next_timestep = [(t, e) for t, e in new_mdd if t == c['timestep'] + 1]
-            for t, e in next_timestep:
-                if c_pos and e[0] != c_vertex:
-                    new_mdd.remove((t, e))
-                if not c_pos and e[0] == c_vertex:
-                    new_mdd.remove((t, e))
-        else: # Filter edges
-            c_edge = tuple(c['loc'])
-            for t, e in cur_timestep:
-                if c_pos and e != c_edge:
-                    new_mdd.remove((t, e))
-                if not c_pos and e == c_edge:
-                    new_mdd.remove((t, e))
-    # Remove non-connecting nodes
-    for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without parents
-        cur_layer = set([e[0] for t, e in new_mdd if t == i])
-        prev_layer = [(t, e) for t, e in new_mdd if t == i - 1]
-        for t, e in prev_layer:
-            if e[1] in cur_layer:
-                continue
-            new_mdd.remove((t, e))
-    for i in range(1, min_timestep - 1): # Remove forward, nodes without children
-        cur_layer = set([e[1] for t, e in new_mdd if t == i])
-        next_layer = [(t, e) for t, e in new_mdd if t == i + 1]
-        for t, e in next_layer:
-            if e[0] in cur_layer:
-                continue
-            new_mdd.remove((t, e))
-    assert (len(mdd) == expected_mdd_len) is True, \
-        f'original mdd was modified while filtering, result: {len(mdd)}, expected: {expected_mdd_len}'
-    # print(f'size: {expected_mdd_len:4} -> {len(new_mdd):3}   diff: {expected_mdd_len - len(new_mdd):5}   time: {(timer.time() - start_timer)*10000:5.2f}e-04')
-    return new_mdd
-
-
 def joint_dependency_diagram(joint_mdd, mdds, agents, paths, min_timestep, constraints):
     """
     Merge two MDDs and return a decision tree.
