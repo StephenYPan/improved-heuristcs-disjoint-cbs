@@ -721,12 +721,12 @@ class CBSSolver(object):
                 new_node['cost'] = get_sum_of_cost(new_node['paths'])
 
                 h_value = 0
-                new_mdds_length = [len(p) for p in new_node['paths']]
                 if cg_heuristics or dg_heuristics or wdg_heuristics:
                     """
                     Search for a new mdd of length n if the old mdd has length < n.
                     """
                     mdd_start = timer.time()
+                    new_mdds_length = [len(p) for p in new_node['paths']]
                     for i in range(self.num_of_agents):
                         if new_mdds_length[i] <= master_mdds_length[i]:
                             continue
