@@ -468,6 +468,7 @@ class CBSSolver(object):
         self.reduced_mdd_cache_hit = 0
         self.reduced_mdd_cache_miss = 0
         self.max_size_reached_counter = 0
+        self.reduced_mdd_max_size_reached = 0
 
         self.open_list = []
 
@@ -635,18 +636,16 @@ class CBSSolver(object):
         master_mdds = [None] * self.num_of_agents
         reduced_mdds = [None] * self.num_of_agents
         reduced_mdds_dict = OrderedDict()
-        reduced_mdds_max_size = 2**20 # in bytes TODO: TUNE HYPERPARAMETER
+        reduced_mdds_max_size = 2**20 # in bytes, 2^10=kib, 2^20=Mib, etc. TODO: TUNE HYPERPARAMETER
 
         root_h_value = 0
         if cg_heuristics or dg_heuristics or wdg_heuristics:
+            # get MDDs for agents
             mdd_start = timer.time()
             for i in range(self.num_of_agents):
                 master_mdds[i] = self.mdd(master_mdds_length[i], i)
-                # master_mdds[i] = self.custom_mdd(0, master_mdds_length[i], i)
-                print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
-            print()
             self.mdd_time += timer.time() - mdd_start
-
+            # get reduced MDDs for each agent given their constraints
             reduce_mdd_start = timer.time()
             for i in range(self.num_of_agents):
                 reduced_mdds[i] = master_mdds[i]
@@ -672,10 +671,6 @@ class CBSSolver(object):
             cur_node = self.pop_node()
             if not cur_node['collisions']: # Goal reached
                 if self.stats:
-                    if cg_heuristics or dg_heuristics or wdg_heuristics:
-                        for i in range(self.num_of_agents):
-                            print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
-                        print(getsizeof(reduced_mdds_dict))
                     self.print_results(cur_node)
                 return cur_node['paths']
             # TODO: Implement ICBS
@@ -727,35 +722,32 @@ class CBSSolver(object):
 
                 h_value = 0
                 new_mdds_length = [len(p) for p in new_node['paths']]
-                # TODO: Calculate and store the joint mdd values for all agents.
-                # Re-calculate the pairs if any agent has changed in path length
-                # mdd_pairs = [[0] * self.num_of_agents for i in range(self.num_of_agents)]
                 if cg_heuristics or dg_heuristics or wdg_heuristics:
-                    # Search for new mdd[i] of length new_mdds_length[i] and add it to master mdds
+                    """
+                    Search for a new mdd of length n if the old mdd has length < n.
+                    """
                     mdd_start = timer.time()
                     for i in range(self.num_of_agents):
                         if new_mdds_length[i] <= master_mdds_length[i]:
                             continue
                         mddi_start = timer.time()
                         new_mdd = self.mdd(new_mdds_length[i], i)
-                        master_mdds[i] = new_mdd # Set union
-                        # new_mdd = self.custom_mdd(master_mdds_length[i], new_mdds_length[i], i)
-                        # master_mdds[i] = master_mdds[i] | new_mdd # Set union
+                        master_mdds[i] = new_mdd
                         mddi_end = timer.time() - mddi_start
                         # print(f'agent-{i}, len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mddi_end:.5f}')
-                        # print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
                         master_mdds_length[i] = new_mdds_length[i]
                     self.mdd_time += timer.time() - mdd_start
 
                     """
-                    Store reduced mdds in memory and only evict when the maximum size is reached.
-                    Storage uses FIFO, last added reduced mdd is removed if eviction is required.
+                    Store reduced MDDs in memory and only evict when the maximum size is reached.
+                    Storage uses FIFO, last added reduced MDD is removed if eviction is required.
                     """
                     reduce_mdd_start = timer.time()
                     for i in range(self.num_of_agents):
                         new_hash_value = hash(frozenset(sorted([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i])))
                         agent_hash_pair = (i, new_hash_value)
                         if agent_hash_pair in reduced_mdds_dict:
+                            # Remove and re-add the reduced MDD to dict to refresh it's lifetime
                             self.reduced_mdd_cache_hit += 1
                             reduced_mdds[i] = reduced_mdds_dict.pop(agent_hash_pair)
                             reduced_mdds_dict[agent_hash_pair] = reduced_mdds[i]                       
@@ -763,11 +755,12 @@ class CBSSolver(object):
                             self.reduced_mdd_cache_miss += 1
                             cur_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
                             reduced_mdds[i] = self.reduce_mdd(master_mdds[i], new_node['paths'][i], cur_constraints)
-                            # Space available in dict to store reduced_mdd
+                            # Check space usage before adding reduced MDD
                             agent_rmdd_size = getsizeof(reduced_mdds[i])
                             rmdd_size = getsizeof(reduced_mdds_dict)
+                            self.reduced_mdd_max_size_reached = max(self.reduced_mdd_max_size_reached, rmdd_size)
                             while (rmdd_size + agent_rmdd_size > reduced_mdds_max_size and len(reduced_mdds_dict) != 0):
-                                self.max_size_reached_counter += 1 
+                                self.max_size_reached_counter += 1
                                 reduced_mdds_dict.popitem()
                                 rmdd_size = getsizeof(reduced_mdds_dict)
                             reduced_mdds_dict[agent_hash_pair] = reduced_mdds[i]
@@ -809,7 +802,8 @@ class CBSSolver(object):
         print(f'MDD filter time:  {self.reduce_mdd_time:.2f} ({self.reduce_mdd_time / self.CPU_time * 100:05.2f}%)')
         print(f'Overhead Ratio:   {overhead_ratio:.2f}x')
         print(f'Hit/Miss Ratio:   {self.reduced_mdd_cache_hit}:{self.reduced_mdd_cache_miss}')
-        print(f'Reached Max Size: {self.max_size_reached_counter}')
+        print(f'Reached Max #:    {self.max_size_reached_counter}')
+        print(f'Max Size:         {self.reduced_mdd_max_size_reached}')
         print(f'Sum of costs:     {get_sum_of_cost(paths)}')
         print(f'Expanded nodes:   {self.num_of_expanded}')
         print(f'Generated nodes:  {self.num_of_generated}')
