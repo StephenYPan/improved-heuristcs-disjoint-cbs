@@ -803,7 +803,7 @@ class CBSSolver(object):
         print(f'Overhead Ratio:   {overhead_ratio:.2f}x')
         print(f'Hit/Miss Ratio:   {self.reduced_mdd_cache_hit}:{self.reduced_mdd_cache_miss}')
         print(f'Reached Max #:    {self.max_size_reached_counter}')
-        print(f'Max Size:         {self.reduced_mdd_max_size_reached}')
+        print(f'Max Size (bytes): {self.reduced_mdd_max_size_reached}')
         print(f'Sum of costs:     {get_sum_of_cost(paths)}')
         print(f'Expanded nodes:   {self.num_of_expanded}')
         print(f'Generated nodes:  {self.num_of_generated}')
