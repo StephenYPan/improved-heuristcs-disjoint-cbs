@@ -184,6 +184,7 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
     see :https://stackoverflow.com/questions/58015774/remove-is-removing-elements-from-both-variables-lists-which-i-set-equal-to
     see: https://stackoverflow.com/questions/1207406/how-to-remove-items-from-a-list-while-iterating
     """
+    start_timer = timer.time()
     expected_mdd_len = len(mdd)
     new_mdd = mdd.copy()
     # Remove non-goal nodes iff the goal node is at min timestep
@@ -193,10 +194,11 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
             if e[1] == path[-1]:
                 continue
             new_mdd.remove((t, e))
+        assert (len([(t, e) for t, e in new_mdd if t == min_timestep - 1]) <= 5) is True, \
+            f'mdd contains invalid edges for agent with start: {path[0]}, goal: {path[-1]} mdd result: {[(t, e) for t, e in new_mdd if t == min_timestep - 1]}'
     for c in constraints:
         c_pos = c['positive']
-        c_timestep = c['timestep']
-        cur_timestep = [(t, e) for t, e in new_mdd if t == c_timestep]
+        cur_timestep = [(t, e) for t, e in new_mdd if t == c['timestep']]
         if len(c['loc']) == 1: # Filter vertices
             c_vertex = c['loc'][0]
             for t, e in cur_timestep:
@@ -205,7 +207,7 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
                 if not c_pos and e[1] == c_vertex:
                     new_mdd.remove((t, e))
             # Remove vertices in next timestep that cannot exist
-            next_timestep = [(t, e) for t, e in new_mdd if t == c_timestep + 1]
+            next_timestep = [(t, e) for t, e in new_mdd if t == c['timestep'] + 1]
             for t, e in next_timestep:
                 if c_pos and e[0] != c_vertex:
                     new_mdd.remove((t, e))
@@ -223,15 +225,19 @@ def reduce_mdd(mdd, path, min_timestep, constraints):
         cur_layer = set([e[0] for t, e in new_mdd if t == i])
         prev_layer = [(t, e) for t, e in new_mdd if t == i - 1]
         for t, e in prev_layer:
-            if e[1] not in cur_layer:
-                new_mdd.remove((t, e))
+            if e[1] in cur_layer:
+                continue
+            new_mdd.remove((t, e))
     for i in range(1, min_timestep - 1): # Remove forward, nodes without children
         cur_layer = set([e[1] for t, e in new_mdd if t == i])
         next_layer = [(t, e) for t, e in new_mdd if t == i + 1]
         for t, e in next_layer:
-            if e[0] not in cur_layer:
-                new_mdd.remove((t, e))
-    assert (len(mdd) == expected_mdd_len) is True, f'original mdd was modified while filtering'
+            if e[0] in cur_layer:
+                continue
+            new_mdd.remove((t, e))
+    assert (len(mdd) == expected_mdd_len) is True, \
+        f'original mdd was modified while filtering, result: {len(mdd)}, expected: {expected_mdd_len}'
+    # print(f'size: {expected_mdd_len:4} -> {len(new_mdd):3}   diff: {expected_mdd_len - len(new_mdd):5}   time: {(timer.time() - start_timer)*10000:5.2f}e-04')
     return new_mdd
 
 
@@ -330,6 +336,7 @@ def cardinal_conflict(mdds, agents, paths, min_timestep, constraints):
     mdds[0] is equal or shorter than mdds[1] meaning mdds[1]'s last layer 
     may or maynot contain the solution.
     """
+    # TODO: Store the reduced mdd for each agent in cg_heuristic to cache the reduced_mdd 
     expected_mdd1_len = len(mdds[0])
     expected_mdd2_len = len(mdds[1])
     constraint_list = [None, None]
@@ -365,6 +372,13 @@ def cg_heuristic(mdds, paths, constraints, collisions):
     """
     V = len(mdds)
     E = 0
+    # Even better is to store this outside and reused the reduced mdds as long as the constraints
+    # for agent i as not changed, use frozenset and hashtable, dict[(agent)] = hash(frozenset())
+    # old_hash = dict[(agent)]
+    # compare with new_hash, if different recalculate reduced_mdd
+    # see: https://stackoverflow.com/questions/46813114/why-does-creating-a-frozenset-out-of-a-list-in-python-convert-the-list
+
+    reduced_mdds = [None] * V
     adj_matrix = [[0] * V for i in range(V)]
     for c in collisions:
         a1 = c['a1']
@@ -551,7 +565,9 @@ class CBSSolver(object):
 
         # compute heuristics for the low-level search
         self.heuristics = []
-        for goal in self.goals:
+        self.start_heuristics = []
+        for start, goal in zip(self.starts, self.goals):
+            self.start_heuristics.append(compute_heuristics(my_map, start))
             self.heuristics.append(compute_heuristics(my_map, goal))
 
     def push_node(self, node):
@@ -591,18 +607,13 @@ class CBSSolver(object):
                 right = mid
         self.open_list = self.open_list[0:right]
 
-    def mdd(self, cur_path_len, agent, start_h_values):
-        """
-        Find the MDD for an agent
-
-        python3 run_experiments.py --instance custominstances/exp2.txt --disjoint --solver CBS --batch
-        """
+    def mdd(self, cur_path_len, agent):
         return increased_cost_tree_search(self.my_map, self.starts[agent], cur_path_len,
-            start_h_values, self.heuristics[agent])
+            self.start_heuristics[agent], self.heuristics[agent])
     
-    def custom_mdd(self, prev_path_len, cur_path_len, agent, start_h_values):
+    def custom_mdd(self, prev_path_len, cur_path_len, agent):
         return custom_increased_cost_tree_search(self.my_map, self.starts[agent],
-            prev_path_len, cur_path_len, start_h_values)
+            prev_path_len, cur_path_len, self.start_heuristics[agent])
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
         """ Finds paths for all agents from their start locations to their goal locations
@@ -645,15 +656,13 @@ class CBSSolver(object):
         # MDDs are sets to remove duplicates
         master_mdds_length = [len(p) for p in root['paths']]
         master_mdds = [None] * self.num_of_agents
-        master_h_values = [None] * self.num_of_agents
 
         root_h_value = 0
         if cg_heuristics or dg_heuristics or wdg_heuristics:
             mdd_start = timer.time()
             for i in range(self.num_of_agents):
-                master_h_values[i] = compute_heuristics(self.my_map, self.starts[i])
-                master_mdds[i] = self.mdd(master_mdds_length[i], i, master_h_values[i])
-                # master_mdds[i] = self.custom_mdd(0, master_mdds_length[i], i, master_h_values[i])
+                master_mdds[i] = self.mdd(master_mdds_length[i], i)
+                # master_mdds[i] = self.custom_mdd(0, master_mdds_length[i], i)
                 print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
                 # print([(t, e) for t, e in master_mdds[i] if t == master_mdds_length[i] - 1 and e[1] == self.goals[i]])
             print()
@@ -741,8 +750,8 @@ class CBSSolver(object):
                         if new_mdds_length[i] <= master_mdds_length[i]:
                             continue
                         mddi_start = timer.time()
-                        new_mdd = self.mdd(new_mdds_length[i], i, master_h_values[i])
-                        # new_mdd = self.custom_mdd(master_mdds_length[i], new_mdds_length[i], i, master_h_values[i])
+                        new_mdd = self.mdd(new_mdds_length[i], i)
+                        # new_mdd = self.custom_mdd(master_mdds_length[i], new_mdds_length[i], i)
                         master_mdds[i] = master_mdds[i] | new_mdd # Set union
                         mddi_end = timer.time() - mddi_start
                         # print(f'agent-{i}, len: {master_mdds_length[i]:2} -> {new_mdds_length[i]:2}, find time: {mddi_end:.5f}')
@@ -762,7 +771,6 @@ class CBSSolver(object):
                     h_value = len(new_node['collisions'])
                 new_node['h_value'] = h_value
                 self.heuristics_time  += timer.time() - heuristics_start
-                # print(f'{self.heuristics_time:.2f}')
 
                 self.push_node(new_node)
 
