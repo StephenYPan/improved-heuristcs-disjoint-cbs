@@ -468,7 +468,7 @@ class CBSSolver(object):
         self.reduced_mdd_cache_hit = 0
         self.reduced_mdd_cache_miss = 0
         self.max_size_reached_counter = 0
-        self.reduced_mdd_max_size_reached = 0
+        self.reduced_mdd_max_cache_size_reached = 0
 
         self.open_list = []
 
@@ -635,7 +635,7 @@ class CBSSolver(object):
         master_mdds_length = [len(p) for p in root['paths']]
         master_mdds = [None] * self.num_of_agents
         reduced_mdds = [None] * self.num_of_agents
-        reduced_mdds_dict = OrderedDict()
+        reduced_mdds_cache = OrderedDict()
         reduced_mdds_max_size = 2**20 # in bytes, 2^10=kib, 2^20=Mib, etc. TODO: TUNE HYPERPARAMETER
 
         root_h_value = 0
@@ -649,7 +649,7 @@ class CBSSolver(object):
             reduce_mdd_start = timer.time()
             for i in range(self.num_of_agents):
                 reduced_mdds[i] = master_mdds[i]
-                reduced_mdds_dict[(i, hash(frozenset([])))] = master_mdds[i]
+                reduced_mdds_cache[(i, hash(frozenset([])))] = master_mdds[i]
             self.reduce_mdd_time += timer.time() - reduce_mdd_start
 
         heuristics_start = timer.time()
@@ -746,24 +746,24 @@ class CBSSolver(object):
                     for i in range(self.num_of_agents):
                         new_hash_value = hash(frozenset(sorted([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i])))
                         agent_hash_pair = (i, new_hash_value)
-                        if agent_hash_pair in reduced_mdds_dict:
+                        if agent_hash_pair in reduced_mdds_cache:
                             # Remove and re-add the reduced MDD to dict to refresh it's lifetime
                             self.reduced_mdd_cache_hit += 1
-                            reduced_mdds[i] = reduced_mdds_dict.pop(agent_hash_pair)
-                            reduced_mdds_dict[agent_hash_pair] = reduced_mdds[i]                       
+                            reduced_mdds[i] = reduced_mdds_cache.pop(agent_hash_pair)
+                            reduced_mdds_cache[agent_hash_pair] = reduced_mdds[i]                       
                         else:
                             self.reduced_mdd_cache_miss += 1
                             cur_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
                             reduced_mdds[i] = self.reduce_mdd(master_mdds[i], new_node['paths'][i], cur_constraints)
                             # Check space usage before adding reduced MDD
                             agent_rmdd_size = getsizeof(reduced_mdds[i])
-                            rmdd_size = getsizeof(reduced_mdds_dict)
-                            self.reduced_mdd_max_size_reached = max(self.reduced_mdd_max_size_reached, rmdd_size)
-                            while (rmdd_size + agent_rmdd_size > reduced_mdds_max_size and len(reduced_mdds_dict) != 0):
+                            rmdd_size = getsizeof(reduced_mdds_cache)
+                            self.reduced_mdd_max_cache_size_reached = max(self.reduced_mdd_max_cache_size_reached, rmdd_size)
+                            while (rmdd_size + agent_rmdd_size > reduced_mdds_max_size and len(reduced_mdds_cache) != 0):
                                 self.max_size_reached_counter += 1
-                                reduced_mdds_dict.popitem()
-                                rmdd_size = getsizeof(reduced_mdds_dict)
-                            reduced_mdds_dict[agent_hash_pair] = reduced_mdds[i]
+                                reduced_mdds_cache.popitem()
+                                rmdd_size = getsizeof(reduced_mdds_cache)
+                            reduced_mdds_cache[agent_hash_pair] = reduced_mdds[i]
                     self.reduce_mdd_time += timer.time() - reduce_mdd_start
 
                 heuristics_start = timer.time()
@@ -802,8 +802,8 @@ class CBSSolver(object):
         print(f'MDD filter time:   {self.reduce_mdd_time:.2f} ({self.reduce_mdd_time / self.CPU_time * 100:05.2f}%)')
         print(f'Overhead Ratio:    {overhead_ratio:.2f}x')
         print(f'Hit/Miss Ratio:    {self.reduced_mdd_cache_hit}:{self.reduced_mdd_cache_miss}')
-        print(f'Reached Max Count: {self.max_size_reached_counter:5}')
-        print(f'Max Cache Size:    {self.reduced_mdd_max_size_reached} (bytes)')
+        print(f'Reached Max Count: {self.max_size_reached_counter}')
+        print(f'Max Cache Size:    {self.reduced_mdd_max_cache_size_reached} (bytes)')
         print(f'Sum of costs:      {get_sum_of_cost(paths)}')
         print(f'Expanded nodes:    {self.num_of_expanded}')
-        print(f'Generated nodes:    {self.num_of_generated}')
+        print(f'Generated nodes:   {self.num_of_generated}')
