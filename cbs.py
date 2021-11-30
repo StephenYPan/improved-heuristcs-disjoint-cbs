@@ -178,6 +178,45 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
+def cardinal_conflict(reduced_mdds, min_timestep):
+    """
+    return true if there exists a cardinal conflict, otherwise false.
+    """
+    for i in range(1, min_timestep):
+        agent1_edge = set([(v, u) for t, (u, v) in reduced_mdds[0] if t == i])
+        agent2_edge = set([e for t, e in reduced_mdds[1] if t == i])
+        agent1_vertex = set([e[0] for e in agent1_edge])
+        agent2_vertex = set([e[1] for e in agent2_edge])
+        if max(len(agent1_vertex), len(agent2_vertex)) == 1 and agent1_vertex == agent2_vertex:
+            return True
+        if max(len(agent1_edge), len(agent2_edge)) == 1 and agent1_edge == agent2_edge:
+            return True
+    return False
+
+
+def cg_heuristic(reduced_mdds, paths, collisions):
+    """
+    Constructs an adjacency matrix of cardinal conflicting agents and calculates the min vertex cover
+    """
+    V = len(paths)
+    E = 0
+    adj_matrix = [[0] * V for i in range(V)]
+    for c in collisions:
+        a1 = c['a1']
+        a2 = c['a2']
+        min_timestep = min(len(paths[a1]), len(paths[a2]))
+        conflict_mdds = [reduced_mdds[a1], reduced_mdds[a2]]
+        if not cardinal_conflict(conflict_mdds, min_timestep):
+            continue
+        adj_matrix[a1][a2] = 1
+        adj_matrix[a2][a1] = 1
+        E += 1
+    if E == 1: # Has to be 1 vertex
+        return 1
+    min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
+    return min_vertex_cover_value
+
+
 def joint_dependency_diagram(joint_mdd, mdds, agents, paths, min_timestep, constraints):
     """
     Merge two MDDs and return a decision tree.
@@ -265,42 +304,6 @@ def joint_dependency_diagram(joint_mdd, mdds, agents, paths, min_timestep, const
     # print('cost:', cost, edge_list)
     # print('\n')
     return (joint_mdd, False)
-
-
-def cardinal_conflict(reduced_mdds, min_timestep):
-    """
-    return true if there exists a cardinal conflict, otherwise false.
-    """
-    for i in range(1, min_timestep):
-        agent1_edge = set([(v, u) for t, (u, v) in reduced_mdds[0] if t == i])
-        agent2_edge = set([e for t, e in reduced_mdds[1] if t == i])
-        agent1_vertex = set([e[0] for e in agent1_edge])
-        agent2_vertex = set([e[1] for e in agent2_edge])
-        if max(len(agent1_vertex), len(agent2_vertex)) == 1 and agent1_vertex == agent2_vertex:
-            return True
-        if max(len(agent1_edge), len(agent2_edge)) == 1 and agent1_edge == agent2_edge:
-            return True
-    return False
-
-
-def cg_heuristic(reduced_mdds, paths, collisions):
-    V = len(paths)
-    E = 0
-    adj_matrix = [[0] * V for i in range(V)]
-    for c in collisions:
-        a1 = c['a1']
-        a2 = c['a2']
-        min_timestep = min(len(paths[a1]), len(paths[a2]))
-        conflict_mdds = [reduced_mdds[a1], reduced_mdds[a2]]
-        if not cardinal_conflict(conflict_mdds, min_timestep):
-            continue
-        adj_matrix[a1][a2] = 1
-        adj_matrix[a2][a1] = 1
-        E += 1
-    if E == 1: # Has to be 1 vertex
-        return 1
-    min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
-    return min_vertex_cover_value
 
 
 def dg_heuristic(reduced_mdds, paths, constraints):
