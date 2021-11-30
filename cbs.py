@@ -1,8 +1,11 @@
 from logging import raiseExceptions
 from os import times
+from sys import getsizeof
 import time as timer
 import heapq
 import random
+
+from collections import OrderedDict
 
 from single_agent_planner import compute_heuristics, a_star, get_location, get_sum_of_cost, pop_node, increased_cost_tree_search, custom_increased_cost_tree_search
 
@@ -462,6 +465,10 @@ class CBSSolver(object):
         self.mdd_time = 0
         self.reduce_mdd_time = 0
 
+        self.reduced_mdd_cache_hit = 0
+        self.reduced_mdd_cache_miss = 0
+        self.max_size_reached_counter = 0
+
         self.open_list = []
 
         self.constraints = constraints if constraints else []
@@ -627,8 +634,8 @@ class CBSSolver(object):
         master_mdds_length = [len(p) for p in root['paths']]
         master_mdds = [None] * self.num_of_agents
         reduced_mdds = [None] * self.num_of_agents
-        reduced_mdds_hash_values = [None] * self.num_of_agents
-        reduced_mdds_lifetime = [0] * self.num_of_agents
+        reduced_mdds_dict = OrderedDict()
+        reduced_mdds_max_size = 2**20 # in bytes TODO: TUNE HYPERPARAMETER
 
         root_h_value = 0
         if cg_heuristics or dg_heuristics or wdg_heuristics:
@@ -637,22 +644,21 @@ class CBSSolver(object):
                 master_mdds[i] = self.mdd(master_mdds_length[i], i)
                 # master_mdds[i] = self.custom_mdd(0, master_mdds_length[i], i)
                 print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
-                # print([(t, e) for t, e in master_mdds[i] if t == master_mdds_length[i] - 1 and e[1] == self.goals[i]])
             print()
             self.mdd_time += timer.time() - mdd_start
 
             reduce_mdd_start = timer.time()
             for i in range(self.num_of_agents):
                 reduced_mdds[i] = master_mdds[i]
-                reduced_mdds_hash_values[i] = hash(frozenset([]))
+                reduced_mdds_dict[(i, hash(frozenset([])))] = master_mdds[i]
             self.reduce_mdd_time += timer.time() - reduce_mdd_start
 
         heuristics_start = timer.time()
         if cg_heuristics:
             root_h_value = max(root_h_value, cg_heuristic(reduced_mdds, root['paths'], root['collisions']))
+        # TODO: FIX PARAMETERS
         if dg_heuristics:
             root_h_value = max(root_h_value, dg_heuristic(master_mdds, root['paths'], root['constraints']))
-        # TODO: FIX PARAMETERS
         if wdg_heuristics:
             root_h_value = max(root_h_value, wdg_heuristic(root['paths'], root['collisions'], root['constraints'], self.my_map, self.heuristics))
         if not (cg_heuristics or dg_heuristics or wdg_heuristics):
@@ -669,6 +675,7 @@ class CBSSolver(object):
                     if cg_heuristics or dg_heuristics or wdg_heuristics:
                         for i in range(self.num_of_agents):
                             print(f'agent-{i} MDD depth: {master_mdds_length[i]:2}, MDD size: {len(master_mdds[i]):5}',)
+                        print(getsizeof(reduced_mdds_dict))
                     self.print_results(cur_node)
                 return cur_node['paths']
             # TODO: Implement ICBS
@@ -740,36 +747,39 @@ class CBSSolver(object):
                         master_mdds_length[i] = new_mdds_length[i]
                     self.mdd_time += timer.time() - mdd_start
 
-                    # Find the reduced mdds for each agent i by checking the hash values to 
-                    # determine if recalculation is needed.
-                    # Variables to work with
-                    # reduced_mdds = [None] * self.num_of_agents
-                    # reduced_mdds_hash_values = [None] * self.num_of_agents
-                    # reduced_mdds_lifetime = [0] * self.num_of_agents
-                    # TODO: How many reduced_mdds do we store? Hyperparameter
                     """
-                    python3 run_experiments.py --instance "custominstances/exp2.txt" --solver CBS --batch --cg
+                    Store reduced mdds in memory and only evict when the maximum size is reached.
+                    Storage uses FIFO, last added reduced mdd is removed if eviction is required.
                     """
                     reduce_mdd_start = timer.time()
                     for i in range(self.num_of_agents):
                         new_hash_value = hash(frozenset(sorted([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i])))
-                        # print(f'agent-{i}:',sorted([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i]))
-                        # print(reduced_mdds_hash_values[i], new_hash_value, new_hash_value == reduced_mdds_hash_values[i])
-                        # print()
-                        if new_hash_value == reduced_mdds_hash_values[i]:
-                            continue
-                        cur_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
-                        reduced_mdds[i] = self.reduce_mdd(master_mdds[i], new_node['paths'][i], cur_constraints)
-                        reduced_mdds_hash_values[i] = new_hash_value
+                        agent_hash_pair = (i, new_hash_value)
+                        if agent_hash_pair in reduced_mdds_dict:
+                            self.reduced_mdd_cache_hit += 1
+                            reduced_mdds[i] = reduced_mdds_dict.pop(agent_hash_pair)
+                            reduced_mdds_dict[agent_hash_pair] = reduced_mdds[i]                       
+                        else:
+                            self.reduced_mdd_cache_miss += 1
+                            cur_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
+                            reduced_mdds[i] = self.reduce_mdd(master_mdds[i], new_node['paths'][i], cur_constraints)
+                            # Space available in dict to store reduced_mdd
+                            agent_rmdd_size = getsizeof(reduced_mdds[i])
+                            rmdd_size = getsizeof(reduced_mdds_dict)
+                            while (rmdd_size + agent_rmdd_size > reduced_mdds_max_size and len(reduced_mdds_dict) != 0):
+                                self.max_size_reached_counter += 1 
+                                reduced_mdds_dict.popitem()
+                                rmdd_size = getsizeof(reduced_mdds_dict)
+                            reduced_mdds_dict[agent_hash_pair] = reduced_mdds[i]
                     self.reduce_mdd_time += timer.time() - reduce_mdd_start
 
                 heuristics_start = timer.time()
                 if cg_heuristics:
                     h_value = max(h_value, cg_heuristic(reduced_mdds, new_node['paths'], new_node['collisions']))
                 # TODO: Pass reduced_mdds instead of master_mdds
+                # TODO: FIX PARAMETERS
                 if dg_heuristics:
                     h_value = max(h_value, dg_heuristic(master_mdds, new_node['paths'], new_node['constraints']))
-                # TODO: FIX PARAMETERS
                 if wdg_heuristics:
                     h_value = max(h_value, wdg_heuristic(new_node['paths'], new_node['collisions'], new_node['constraints'], self.my_map, self.heuristics))
                 if not (cg_heuristics or dg_heuristics or wdg_heuristics):
@@ -792,12 +802,14 @@ class CBSSolver(object):
         total_overhead = self.mdd_time + self.reduce_mdd_time + self.heuristics_time
         search_time = self.CPU_time - total_overhead
         overhead_ratio = total_overhead / search_time
-        print(f'CPU time (s):    {self.CPU_time:.2f}')
-        print(f'Search time:     {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
-        print(f'Heuristics time: {self.heuristics_time:.2f} ({self.heuristics_time / self.CPU_time * 100:05.2f}%)')
-        print(f'MDD time:        {self.mdd_time:.2f} ({self.mdd_time / self.CPU_time * 100:05.2f}%)')
-        print(f'MDD filter time: {self.reduce_mdd_time:.2f} ({self.reduce_mdd_time / self.CPU_time * 100:05.2f}%)')
-        print(f'Overhead Ratio:  {overhead_ratio:.2f}x')
-        print(f'Sum of costs:    {get_sum_of_cost(paths)}')
-        print(f'Expanded nodes:  {self.num_of_expanded}')
-        print(f'Generated nodes: {self.num_of_generated}')
+        print(f'CPU time (s):     {self.CPU_time:.2f}')
+        print(f'Search time:      {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
+        print(f'Heuristics time:  {self.heuristics_time:.2f} ({self.heuristics_time / self.CPU_time * 100:05.2f}%)')
+        print(f'MDD time:         {self.mdd_time:.2f} ({self.mdd_time / self.CPU_time * 100:05.2f}%)')
+        print(f'MDD filter time:  {self.reduce_mdd_time:.2f} ({self.reduce_mdd_time / self.CPU_time * 100:05.2f}%)')
+        print(f'Overhead Ratio:   {overhead_ratio:.2f}x')
+        print(f'Hit/Miss Ratio:   {self.reduced_mdd_cache_hit}:{self.reduced_mdd_cache_miss}')
+        print(f'Reached Max Size: {self.max_size_reached_counter}')
+        print(f'Sum of costs:     {get_sum_of_cost(paths)}')
+        print(f'Expanded nodes:   {self.num_of_expanded}')
+        print(f'Generated nodes:  {self.num_of_generated}')
