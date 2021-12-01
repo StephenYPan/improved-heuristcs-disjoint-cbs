@@ -598,9 +598,8 @@ class CBSSolver(object):
             # conflict_mdds = [reduced_mdds[a1], reduced_mdds[a2]]
             # is_cardinal_conflict = find_cardinal_conflict(conflict_mdds, min_timestep)
             # Cache
-            hash1_value = hash(frozenset(reduced_mdds[a1]))
-            hash2_value = hash(frozenset(reduced_mdds[a2]))
-            agent_hash_pair = (a1, a2, hash1_value, hash2_value)
+            hash_value = hash(frozenset(reduced_mdds[a2])) ^ hash(frozenset(reduced_mdds[a1]))
+            agent_hash_pair = (a1, a2, hash_value)
             if agent_hash_pair in h_cache:
                 self.heuristics_cache_hit += 1
                 is_cardinal_conflict = h_cache[agent_hash_pair]
@@ -616,7 +615,7 @@ class CBSSolver(object):
                     self.heuristics_evict_counter += 1
                     h_cache.popitem()
                     h_cache_size = getsizeof(h_cache)
-                h_cache[agent_hash_pair] = is_cardinal_conflict              
+                h_cache[agent_hash_pair] = is_cardinal_conflict
                 self.heuristics_miss_time += timer.time() - h_start
             if not is_cardinal_conflict:
                 continue
