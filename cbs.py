@@ -596,7 +596,7 @@ class CBSSolver(object):
             # Non-cache
             # min_timestep = min(len(paths[a1]), len(paths[a2]))
             # conflict_mdds = [reduced_mdds[a1], reduced_mdds[a2]]
-            # is_cardinal_conflict = cardinal_conflict(conflict_mdds, min_timestep)
+            # is_cardinal_conflict = find_cardinal_conflict(conflict_mdds, min_timestep)
             # Cache
             hash1_value = hash(frozenset(reduced_mdds[a1]))
             hash2_value = hash(frozenset(reduced_mdds[a2]))
