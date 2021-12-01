@@ -539,7 +539,7 @@ class CBSSolver(object):
         see: https://stackoverflow.com/questions/58015774/remove-is-removing-elements-from-both-variables-lists-which-i-set-equal-to
         see: https://stackoverflow.com/questions/1207406/how-to-remove-items-from-a-list-while-iterating
         """
-        start_timer = timer.time()
+        # start_timer = timer.time()
         expected_mdd_len = len(mdd)
         min_timestep = len(path)
         new_mdd = mdd.copy()
@@ -594,7 +594,7 @@ class CBSSolver(object):
                 new_mdd.remove((t, e))
         assert (len(mdd) == expected_mdd_len) is True, \
             f'original mdd was modified while filtering, result: {len(mdd)}, expected: {expected_mdd_len}'
-        print(f'size: {expected_mdd_len:4} -> {len(new_mdd):3}   diff: {expected_mdd_len - len(new_mdd):5}   time: {(timer.time() - start_timer)*1000:5.2f}e-03')
+        # print(f'size: {expected_mdd_len:4} -> {len(new_mdd):3}   diff: {expected_mdd_len - len(new_mdd):5}   time: {(timer.time() - start_timer)*1000:5.2f}e-03')
         return new_mdd
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
