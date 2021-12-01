@@ -536,10 +536,10 @@ class CBSSolver(object):
     def reduce_mdd(self, mdd, path, constraints):
         """
         mdd is a reference to the master mdd, a shallow copy is needed if you want to mutate the list.
-        see :https://stackoverflow.com/questions/58015774/remove-is-removing-elements-from-both-variables-lists-which-i-set-equal-to
+        see: https://stackoverflow.com/questions/58015774/remove-is-removing-elements-from-both-variables-lists-which-i-set-equal-to
         see: https://stackoverflow.com/questions/1207406/how-to-remove-items-from-a-list-while-iterating
         """
-        start_timer = timer.time()
+        # start_timer = timer.time()
         expected_mdd_len = len(mdd)
         min_timestep = len(path)
         new_mdd = mdd.copy()
