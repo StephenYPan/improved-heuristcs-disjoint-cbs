@@ -464,6 +464,8 @@ class CBSSolver(object):
         self.heuristics_time = 0
         self.mdd_time = 0
         self.reduce_mdd_time = 0
+        self.cache_hit_time = 0
+        self.cache_miss_time = 0
 
         self.reduced_mdd_cache_hit = 0
         self.reduced_mdd_cache_miss = 0
@@ -592,7 +594,7 @@ class CBSSolver(object):
                 new_mdd.remove((t, e))
         assert (len(mdd) == expected_mdd_len) is True, \
             f'original mdd was modified while filtering, result: {len(mdd)}, expected: {expected_mdd_len}'
-        # print(f'size: {expected_mdd_len:4} -> {len(new_mdd):3}   diff: {expected_mdd_len - len(new_mdd):5}   time: {(timer.time() - start_timer)*10000:5.2f}e-04')
+        # print(f'size: {expected_mdd_len:4} -> {len(new_mdd):3}   diff: {expected_mdd_len - len(new_mdd):5}   time: {(timer.time() - start_timer)*1000:5.2f}e-03')
         return new_mdd
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
@@ -746,11 +748,13 @@ class CBSSolver(object):
                     for i in range(self.num_of_agents):
                         new_hash_value = hash(frozenset(sorted([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i])))
                         agent_hash_pair = (i, new_hash_value)
+                        cache_timer = timer.time()
                         if agent_hash_pair in reduced_mdds_cache:
                             # Remove and re-add the reduced MDD to dict to refresh it's lifetime
                             self.reduced_mdd_cache_hit += 1
-                            reduced_mdds[i] = reduced_mdds_cache.pop(agent_hash_pair)
-                            reduced_mdds_cache[agent_hash_pair] = reduced_mdds[i]                       
+                            reduced_mdds[i] = reduced_mdds_cache[agent_hash_pair]
+                            reduced_mdds_cache.move_to_end(agent_hash_pair)
+                            self.cache_hit_time += timer.time() - cache_timer            
                         else:
                             self.reduced_mdd_cache_miss += 1
                             cur_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
@@ -763,6 +767,7 @@ class CBSSolver(object):
                                 reduced_mdds_cache.popitem()
                                 rmdd_cache_size = getsizeof(reduced_mdds_cache)
                             reduced_mdds_cache[agent_hash_pair] = reduced_mdds[i]
+                            self.cache_miss_time += timer.time() - cache_timer
                             self.reduced_mdd_cache_size_reached = rmdd_cache_size
                     self.reduce_mdd_time += timer.time() - reduce_mdd_start
 
@@ -802,6 +807,8 @@ class CBSSolver(object):
         print(f'MDD filter time:   {self.reduce_mdd_time:.2f} ({self.reduce_mdd_time / self.CPU_time * 100:05.2f}%)')
         print(f'Overhead Ratio:    {overhead_ratio:.2f}x')
         print(f'Hit/Miss Ratio:    {self.reduced_mdd_cache_hit}:{self.reduced_mdd_cache_miss}')
+        print(f'Hit time:          {self.cache_hit_time:.2f}')
+        print(f'Miss time:         {self.cache_miss_time:.2f}')
         print(f'# Evicted:         {self.evict_counter}')
         print(f'Cache Limit:       {self.reduced_mdd_max_cache_size} (bytes)')
         print(f'Cache Used:        {self.reduced_mdd_cache_size_reached} (bytes)')
