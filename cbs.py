@@ -762,7 +762,7 @@ class CBSSolver(object):
                             # Check space usage before adding reduced MDD
                             agent_rmdd_size = getsizeof(reduced_mdds[i])
                             rmdd_cache_size = getsizeof(reduced_mdds_cache)
-                            while (rmdd_cache_size + agent_rmdd_size > self.reduced_mdd_max_cache_size and len(reduced_mdds_cache) != 0):
+                            while rmdd_cache_size + agent_rmdd_size > self.reduced_mdd_max_cache_size and len(reduced_mdds_cache) != 0:
                                 self.evict_counter += 1
                                 reduced_mdds_cache.popitem()
                                 rmdd_cache_size = getsizeof(reduced_mdds_cache)
