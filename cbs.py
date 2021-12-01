@@ -181,7 +181,7 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
-def cardinal_conflict(reduced_mdds, min_timestep):
+def find_cardinal_conflict(reduced_mdds, min_timestep):
     """
     return true if there exists a cardinal conflict, otherwise false.
     """
@@ -601,11 +601,16 @@ class CBSSolver(object):
             hash1_value = hash(frozenset(reduced_mdds[a1]))
             hash2_value = hash(frozenset(reduced_mdds[a2]))
             agent_hash_pair = (a1, a2, hash1_value, hash2_value)
-            if agent_hash_pair not in h_cache:
+            if agent_hash_pair in h_cache:
+                self.heuristics_cache_hit += 1
+                is_cardinal_conflict = h_cache[agent_hash_pair]
+                h_cache.move_to_end(agent_hash_pair)
+                self.heuristics_hit_time += timer.time() - h_start
+            else:
                 self.heuristics_cache_miss += 1
                 min_timestep = min(len(paths[a1]), len(paths[a2]))
                 conflict_mdds = [reduced_mdds[a1], reduced_mdds[a2]]
-                is_cardinal_conflict = cardinal_conflict(conflict_mdds, min_timestep)
+                is_cardinal_conflict = find_cardinal_conflict(conflict_mdds, min_timestep)
                 h_cache_size = getsizeof(h_cache)
                 while h_cache_size > self.heuristics_max_size and len(h_cache) != 0:
                     self.heuristics_evict_counter += 1
@@ -613,11 +618,6 @@ class CBSSolver(object):
                     h_cache_size = getsizeof(h_cache)
                 h_cache[agent_hash_pair] = is_cardinal_conflict              
                 self.heuristics_miss_time += timer.time() - h_start
-            else:
-                self.heuristics_cache_hit += 1
-                is_cardinal_conflict = h_cache[agent_hash_pair]
-                h_cache.move_to_end(agent_hash_pair)
-                self.heuristics_hit_time += timer.time() - h_start
             if not is_cardinal_conflict:
                 continue
             adj_matrix[a1][a2] = 1
