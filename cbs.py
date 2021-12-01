@@ -758,12 +758,12 @@ class CBSSolver(object):
                             # Check space usage before adding reduced MDD
                             agent_rmdd_size = getsizeof(reduced_mdds[i])
                             rmdd_cache_size = getsizeof(reduced_mdds_cache)
-                            self.reduced_mdd_cache_size_reached = max(self.reduced_mdd_cache_size_reached, rmdd_cache_size)
                             while (rmdd_cache_size + agent_rmdd_size > self.reduced_mdd_max_cache_size and len(reduced_mdds_cache) != 0):
                                 self.evict_counter += 1
                                 reduced_mdds_cache.popitem()
                                 rmdd_cache_size = getsizeof(reduced_mdds_cache)
                             reduced_mdds_cache[agent_hash_pair] = reduced_mdds[i]
+                            self.reduced_mdd_cache_size_reached = rmdd_cache_size
                     self.reduce_mdd_time += timer.time() - reduce_mdd_start
 
                 heuristics_start = timer.time()
