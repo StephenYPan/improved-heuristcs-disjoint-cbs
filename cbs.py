@@ -750,7 +750,6 @@ class CBSSolver(object):
                         agent_hash_pair = (i, new_hash_value)
                         cache_timer = timer.time()
                         if agent_hash_pair in reduced_mdds_cache:
-                            # Remove and re-add the reduced MDD to dict to refresh it's lifetime
                             self.reduced_mdd_cache_hit += 1
                             reduced_mdds[i] = reduced_mdds_cache[agent_hash_pair]
                             reduced_mdds_cache.move_to_end(agent_hash_pair)
