@@ -539,7 +539,7 @@ class CBSSolver(object):
         see: https://stackoverflow.com/questions/58015774/remove-is-removing-elements-from-both-variables-lists-which-i-set-equal-to
         see: https://stackoverflow.com/questions/1207406/how-to-remove-items-from-a-list-while-iterating
         """
-        # start_timer = timer.time()
+        start_timer = timer.time()
         expected_mdd_len = len(mdd)
         min_timestep = len(path)
         new_mdd = mdd.copy()
@@ -594,7 +594,7 @@ class CBSSolver(object):
                 new_mdd.remove((t, e))
         assert (len(mdd) == expected_mdd_len) is True, \
             f'original mdd was modified while filtering, result: {len(mdd)}, expected: {expected_mdd_len}'
-        # print(f'size: {expected_mdd_len:4} -> {len(new_mdd):3}   diff: {expected_mdd_len - len(new_mdd):5}   time: {(timer.time() - start_timer)*1000:5.2f}e-03')
+        print(f'size: {expected_mdd_len:4} -> {len(new_mdd):3}   diff: {expected_mdd_len - len(new_mdd):5}   time: {(timer.time() - start_timer)*1000:5.2f}e-03')
         return new_mdd
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
@@ -622,7 +622,8 @@ class CBSSolver(object):
             'h_value': 0,
             'constraints': [],
             'paths': [],
-            'collisions': []
+            'collisions': [],
+            'rmdds': []
         }
         root['constraints'] = self.constraints
         for i in range(self.num_of_agents):  # Find initial path for each agent
@@ -652,6 +653,7 @@ class CBSSolver(object):
             for i in range(self.num_of_agents):
                 reduced_mdds[i] = master_mdds[i]
                 reduced_mdds_cache[(i, hash(frozenset([])))] = master_mdds[i]
+            root['rmdds'] = reduced_mdds.copy()
             self.reduce_mdd_time += timer.time() - reduce_mdd_start
 
         heuristics_start = timer.time()
@@ -684,7 +686,8 @@ class CBSSolver(object):
                     'h_value': 0,
                     'constraints': [],
                     'paths': [],
-                    'collisions': []
+                    'collisions': [],
+                    'rmdds': []
                 }
 
                 new_node['constraints'] = cur_node['constraints'] \
@@ -768,6 +771,7 @@ class CBSSolver(object):
                             reduced_mdds_cache[agent_hash_pair] = reduced_mdds[i]
                             self.cache_miss_time += timer.time() - cache_timer
                             self.reduced_mdd_cache_size_reached = rmdd_cache_size
+                    new_node['rmdds'] = reduced_mdds.copy()
                     self.reduce_mdd_time += timer.time() - reduce_mdd_start
 
                 heuristics_start = timer.time()
