@@ -1,6 +1,5 @@
 import heapq
 from os import times
-import time as timer
 
 def move(loc, dir):
     directions = [(0, -1), (1, 0), (0, 1), (-1, 0), (0, 0)] # Clockwise movement + wait
@@ -241,7 +240,6 @@ def increased_cost_tree_search(my_map, start_loc, max_path_cost, start_h_values,
         sanity check:
         python3 run_experiments.py --instance "subsetinstances/test_1.txt" --solver CBS --batch --disjoint --cg
     """
-    start_time = timer.time()
     ict = set()
     ict.add((0, start_loc))
 
@@ -258,7 +256,6 @@ def increased_cost_tree_search(my_map, start_loc, max_path_cost, start_h_values,
                 if next_t + goal_h_values[(next_v)] >= max_path_cost:
                     continue
                 ict.add((next_t, (v, next_v)))
-    # print(f'matrix ver. time: {timer.time() - start_time:.6f}')
     return ict
 
 def custom_increased_cost_tree_search(my_map, start_loc, min_path_cost, max_path_cost, start_h_values):
@@ -276,7 +273,6 @@ def custom_increased_cost_tree_search(my_map, start_loc, min_path_cost, max_path
         sanity check:
         python3 run_experiments.py --instance "subsetinstances/test_1.txt" --solver CBS --batch --disjoint --cg
     """
-    start_time = timer.time()
     ict = set()
     if min_path_cost == 0:
         ict.add((0, start_loc))
@@ -295,5 +291,4 @@ def custom_increased_cost_tree_search(my_map, start_loc, min_path_cost, max_path
                 if is_invalid_move(my_map, next_v):
                     continue
                 ict.add((next_t, (v, next_v)))
-    # print(f'matrix ver. time: {timer.time() - start_time:.6f}')
     return ict
