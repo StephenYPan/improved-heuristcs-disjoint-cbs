@@ -673,7 +673,7 @@ class CBSSolver(object):
         master_mdds = [None] * self.num_of_agents
         reduced_mdds = [None] * self.num_of_agents
         reduced_mdds_cache = OrderedDict()
-        heuristics_cache = OrderedDict()
+        h_cache = OrderedDict()
 
         root_h_value = 0
         if cg_heuristics or dg_heuristics or wdg_heuristics:
@@ -692,7 +692,7 @@ class CBSSolver(object):
 
         heuristics_start = timer.time()
         if cg_heuristics:
-            root_h_value = max(root_h_value, self.cg_heuristic(heuristics_cache, reduced_mdds, root['paths'], root['collisions']))
+            root_h_value = max(root_h_value, self.cg_heuristic(h_cache, reduced_mdds, root['paths'], root['collisions']))
         # TODO: FIX PARAMETERS
         if dg_heuristics:
             root_h_value = max(root_h_value, dg_heuristic(master_mdds, root['paths'], root['constraints']))
@@ -811,7 +811,7 @@ class CBSSolver(object):
 
                 heuristics_start = timer.time()
                 if cg_heuristics:
-                    h_value = max(h_value, self.cg_heuristic(heuristics_cache, reduced_mdds, new_node['paths'], new_node['collisions']))
+                    h_value = max(h_value, self.cg_heuristic(h_cache, reduced_mdds, new_node['paths'], new_node['collisions']))
                 # TODO: Pass reduced_mdds instead of master_mdds
                 # TODO: FIX PARAMETERS
                 if dg_heuristics:
