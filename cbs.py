@@ -557,9 +557,9 @@ class CBSSolver(object):
         pos_vertex = sorted(pos_vertex)
         self.mdd_pos_constraint_time += timer.time() - pos_constraint_timer
 
-        # find mdd given intermediary goal nodes
+        # Find MDD given intermediary goal nodes
         for start, goal in zip(pos_vertex, pos_vertex[1:]):
-            # check cache for Dijkstra results for start and goal
+            # Cache Dijkstra results for start and goal locations
             low_level_h_timer = timer.time()
             h_values = [None, None]
             for i, location in enumerate([start[1], goal[1]]):
@@ -581,15 +581,7 @@ class CBSSolver(object):
                     self.low_lv_h_cache_miss += 1
                     self.low_lv_h_cache_miss_time += timer.time() - ll_h_cache_timer
             self.low_lv_h_time += timer.time() - low_level_h_timer
-            # Cache partial mdd for speed up
-            """
-            self.partial_mdd_cache = OrderedDict()
-            self.partial_mdd_time = 0
-            self.partial_mdd_hit_time = 0
-            self.partial_mdd_miss_time = 0
-            self.partial_mdd_max_size = 2**20
-            self.partial_mdd_evict_counter = 0
-            """
+            # Cache partial MDD
             partial_mdd_timer = timer.time()
             max_cost = goal[0] - start[0] + 1
             cost_offset = start[0]
@@ -611,16 +603,16 @@ class CBSSolver(object):
                 self.partial_mdd_cache[partial_mdd_key] = partial_mdd
                 self.partial_mdd_miss += 1
                 self.partial_mdd_miss_time += timer.time() - partial_mdd_timer
-            mdd = mdd | partial_mdd # Set Union
+            mdd = mdd | partial_mdd # Set union
             self.partial_mdd_time += timer.time() - partial_mdd_timer
         # Negative Constraints
         neg_constraint_timer = timer.time()
         neg_vertex = [(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == False and len(c['loc']) == 1 and c['timestep'] < min_timestep]
         neg_edge = [(c['timestep'], tuple(c['loc'])) for c in constraints if c['positive'] == False and len(c['loc']) == 2 and c['timestep'] < min_timestep]
         for t, e in neg_edge:
-            if (t, e) in mdd: # mdd may not have the negative edges
+            if (t, e) in mdd: # MDD may not have the negative edges
                 mdd.remove((t, e))
-        # remove vertices and the relating vertices in the next timestep
+        # Remove vertices and the relating vertices in the next timestep
         for timestep, vertex in neg_vertex:
             edges_to_remove = [(t, e) for t, e in mdd if t == timestep and e[1] == vertex]
             edges_to_remove += [(t, e) for t, e in mdd if t == timestep + 1 and e[0] == vertex]
@@ -811,10 +803,7 @@ class CBSSolver(object):
 
                 h_value = 0
                 if cg_heuristics or dg_heuristics or wdg_heuristics:
-                    """
-                    Cache MDDs in memory and only evict when the maximum size is reached.
-                    Cache uses FIFO, first added MDD is removed if eviction is required.
-                    """
+                    # Cache the MDDs
                     mdd_start = timer.time()
                     for i in range(self.num_of_agents):
                         mdd_cache_timer = timer.time()
@@ -861,8 +850,6 @@ class CBSSolver(object):
 
     def print_results(self, node):
         # print("\n Found a solution! \n")
-        # for i in range(self.num_of_agents):
-        #     print('agent:', i, 'path len:', len(node['paths'][i]), node['paths'][i])
         print()
         self.CPU_time = timer.time() - self.start_time
         paths = node['paths']
