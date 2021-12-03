@@ -559,9 +559,9 @@ class CBSSolver(object):
                     h_values[i] = compute_heuristics(self.my_map, location)
                     h_cache_size = getsizeof(self.low_lv_h_cache)
                     while h_cache_size > self.low_lv_h_cache_max_size and len(self.low_lv_h_cache) != 0:
+                        self.low_lv_h_cache_evict_counter += 1
                         self.low_lv_h_cache.popitem()
                         h_cache_size = getsizeof(self.low_lv_h_cache)
-                        self.low_lv_h_cache_evict_counter += 1
                     self.low_lv_h_cache[location] = h_values[i]
                     self.low_lv_h_cache_miss += 1
                     self.low_lv_h_cache_miss_time += timer.time() - ll_h_timer
@@ -626,9 +626,9 @@ class CBSSolver(object):
                 is_cardinal_conflict = find_cardinal_conflict(conflict_mdds, min_timestep)
                 h_cache_size = getsizeof(self.h_cache)
                 while h_cache_size > self.h_cache_max_size and len(self.h_cache) != 0:
+                    self.h_cache_evict_counter += 1
                     self.h_cache.popitem()
                     h_cache_size = getsizeof(self.h_cache)
-                    self.h_cache_evict_counter += 1
                 self.h_cache[agent_hash_pair] = is_cardinal_conflict
                 self.h_cache_miss += 1
                 self.h_cache_miss_time += timer.time() - h_start
@@ -769,7 +769,7 @@ class CBSSolver(object):
                 if cg_heuristics or dg_heuristics or wdg_heuristics:
                     """
                     Cache MDDs in memory and only evict when the maximum size is reached.
-                    Cache uses FIFO, first added reduced MDD is removed if eviction is required.
+                    Cache uses FIFO, first added MDD is removed if eviction is required.
                     """
                     mdd_start = timer.time()
                     for i in range(self.num_of_agents):
@@ -780,19 +780,17 @@ class CBSSolver(object):
                             mdds[i] = self.mdds_cache[agent_hash_pair]
                             self.mdds_cache.move_to_end(agent_hash_pair)
                             self.mdd_cache_hit += 1
-                            self.mdd_cache_hit_time += timer.time() - mdd_cache_timer            
+                            self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
                         else:
                             self.mdd_cache_miss += 1
                             cur_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
                             mdds[i] = self.mdd(new_node['paths'][i], cur_constraints)
-                            # Check space usage before adding reduced MDD
-                            agent_mdd_size = getsizeof(mdds[i])
+                            self.mdds_cache[agent_hash_pair] = mdds[i]
                             mdd_cache_size = getsizeof(self.mdds_cache)
-                            while mdd_cache_size + agent_mdd_size > self.mdd_cache_max_size and len(self.mdds_cache) != 0:
+                            while mdd_cache_size > self.mdd_cache_max_size and len(self.mdds_cache) != 0:
+                                self.mdd_evict_counter += 1
                                 self.mdds_cache.popitem()
                                 mdd_cache_size = getsizeof(self.mdds_cache)
-                                self.mdd_evict_counter += 1
-                            self.mdds_cache[agent_hash_pair] = mdds[i]
                             self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
                     new_node['mdds'] = mdds.copy()
                     self.mdd_time += timer.time() - mdd_start
@@ -823,32 +821,32 @@ class CBSSolver(object):
         print()
         self.CPU_time = timer.time() - self.start_time
         paths = node['paths']
-        print(f'CPU time (s):      {self.CPU_time:.2f}')
-        print(f'Sum of costs:      {get_sum_of_cost(paths)}')
-        print(f'Expanded nodes:    {self.num_of_expanded}')
-        print(f'Generated nodes:   {self.num_of_generated}')
+        print(f'CPU time (s):       {self.CPU_time:.2f}')
         if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
             overhead = self.mdd_time + self.h_time
             search_time = self.CPU_time - overhead
-            print(f'    Search time:        {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
-            print(f'    Overhead time:      {overhead:.2f} ({overhead / self.CPU_time * 100:05.2f}%)')
-            print(f'    Overhead ratio:     {overhead / search_time:.2f}x')
-            print(f'    Heuristics time:    {self.h_time:.2f}')
-            print(f'     - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
-            print(f'     - Hit time:        {self.h_cache_hit_time:.2f} ({self.h_cache_hit_time / self.h_time * 100:05.2f}%)')
-            print(f'     - Miss time:       {self.h_cache_miss_time:.2f} ({self.h_cache_miss_time / self.h_time * 100:05.2f}%)')
-            print(f'     - Hit/miss ratio:  {self.h_cache_hit}:{self.h_cache_miss}')
-            print(f'     - Evicted #:       {self.h_cache_evict_counter}')
-            print(f'    MDD time:           {self.mdd_time:.2f}')
-            print(f'     - Hit time:        {self.mdd_cache_hit_time:.2f} ({self.mdd_cache_hit_time / self.mdd_time * 100:05.2f}%)')
-            print(f'     - Miss time:       {self.mdd_cache_miss_time:.2f} ({self.mdd_cache_miss_time / self.mdd_time * 100:05.2f}%)')
-            print(f'        - Construction:      {self.mdd_constraint_time:.2f} ({self.mdd_constraint_time / self.mdd_cache_miss_time * 100:05.2f}%)')
-            print(f'           - Filter time:         {self.mdd_constraint_time - self.low_lv_h_time:.2f} ({(self.mdd_constraint_time - self.low_lv_h_time) / self.mdd_constraint_time * 100:05.2f}%)')
-            print(f'           - Dijkstra time:       {self.low_lv_h_time:.2f} ({self.low_lv_h_time / self.mdd_constraint_time * 100:05.2f}%)')
-            print(f'              - Hit time:         {self.low_lv_h_cache_hit_time:.2f} ({self.low_lv_h_cache_hit_time / self.low_lv_h_time * 100:05.2f}%)')
-            print(f'              - Miss time:        {self.low_lv_h_cache_miss_time:.2f} ({self.low_lv_h_cache_miss_time / self.low_lv_h_time * 100:05.2f}%)')            
-            print(f'              - Hit/miss ratio:   {self.low_lv_h_cache_hit}:{self.low_lv_h_cache_miss}')
-            print(f'              - Evicted #:        {self.low_lv_h_cache_evict_counter}')
-            print(f'        - Clean up:          {self.mdd_clean_up_time:.2f} ({self.mdd_clean_up_time / self.mdd_cache_miss_time * 100:05.2f}%)')
-            print(f'     - Hit/miss ratio:  {self.mdd_cache_hit}:{self.mdd_cache_miss}')
-            print(f'     - Evicted #:       {self.mdd_evict_counter}')
+            print(f'Search time:        {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
+            print(f'Overhead time:      {overhead:.2f} ({overhead / self.CPU_time * 100:05.2f}%)')
+            print(f'Overhead ratio:     {overhead / search_time:.2f}x')
+            print(f'Heuristics time:    {self.h_time:.2f}')
+            print(f' - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
+            print(f' - Hit time:        {self.h_cache_hit_time:.2f} ({self.h_cache_hit_time / self.h_time * 100:05.2f}%)')
+            print(f' - Miss time:       {self.h_cache_miss_time:.2f} ({self.h_cache_miss_time / self.h_time * 100:05.2f}%)')
+            print(f' - Hit/miss ratio:  {self.h_cache_hit}:{self.h_cache_miss}')
+            print(f' - Evicted #:       {self.h_cache_evict_counter}')
+            print(f'MDD time:           {self.mdd_time:.2f}')
+            print(f' - Hit time:        {self.mdd_cache_hit_time:.2f} ({self.mdd_cache_hit_time / self.mdd_time * 100:05.2f}%)')
+            print(f' - Miss time:       {self.mdd_cache_miss_time:.2f} ({self.mdd_cache_miss_time / self.mdd_time * 100:05.2f}%)')
+            print(f'    - Construction:      {self.mdd_constraint_time:.2f}')
+            print(f'       - Filter time:         {abs(self.mdd_constraint_time - self.low_lv_h_time):.2f}')
+            print(f'       - Dijkstra time:       {self.low_lv_h_time:.2f}')
+            print(f'          - Hit time:         {self.low_lv_h_cache_hit_time:.2f}')
+            print(f'          - Miss time:        {self.low_lv_h_cache_miss_time:.2f}')            
+            print(f'          - Hit/miss ratio:   {self.low_lv_h_cache_hit}:{self.low_lv_h_cache_miss}')
+            print(f'          - Evicted #:        {self.low_lv_h_cache_evict_counter}')
+            print(f'    - Clean up:          {self.mdd_clean_up_time:.2f}')
+            print(f' - Hit/miss ratio:  {self.mdd_cache_hit}:{self.mdd_cache_miss}')
+            print(f' - Evicted #:       {self.mdd_evict_counter}')
+        print(f'Sum of costs:       {get_sum_of_cost(paths)}')
+        print(f'Expanded nodes:     {self.num_of_expanded}')
+        print(f'Generated nodes:    {self.num_of_generated}')
