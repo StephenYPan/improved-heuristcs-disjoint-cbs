@@ -784,8 +784,8 @@ class CBSSolver(object):
                             self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
                         else:
                             self.mdd_cache_miss += 1
-                            cur_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
-                            mdds[i] = self.mdd(new_node['paths'][i], cur_constraints)
+                            agent_i_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
+                            mdds[i] = self.mdd(new_node['paths'][i], agent_i_constraints)
                             mdd_size = getsizeof(mdds[i])
                             mdd_cache_size = getsizeof(self.mdds_cache)
                             while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdds_cache) != 0:
