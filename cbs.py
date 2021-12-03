@@ -535,16 +535,16 @@ class CBSSolver(object):
         min_timestep = len(path)
         constraint_timer = timer.time()
         # Positive Constraints
-        pos_vertex_constraint = set([(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == True and len(c['loc']) == 1 and c['timestep'] < min_timestep])
-        pos_edge_constraint = [(c['timestep'], tuple(c['loc'])) for c in constraints if c['positive'] == True and len(c['loc']) == 2 and c['timestep'] < min_timestep]
-        for t, e in pos_edge_constraint:
-            pos_vertex_constraint.add((t - 1, e[0]))
-            pos_vertex_constraint.add((t, e[1]))
-        pos_vertex_constraint.add((0, path[0]))
-        pos_vertex_constraint.add((min_timestep - 1, path[-1]))
-        pos_vertex_constraint = sorted(pos_vertex_constraint)
+        pos_vertex = set([(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == True and len(c['loc']) == 1 and c['timestep'] < min_timestep])
+        pos_edge = [(c['timestep'], tuple(c['loc'])) for c in constraints if c['positive'] == True and len(c['loc']) == 2 and c['timestep'] < min_timestep]
+        for t, e in pos_edge:
+            pos_vertex.add((t - 1, e[0]))
+            pos_vertex.add((t, e[1]))
+        pos_vertex.add((0, path[0]))
+        pos_vertex.add((min_timestep - 1, path[-1]))
+        pos_vertex = sorted(pos_vertex)
         # find mdd given intermediary goal nodes
-        for start, goal in zip(pos_vertex_constraint, pos_vertex_constraint[1:]):
+        for start, goal in zip(pos_vertex, pos_vertex[1:]):
             # check cache for start and goal
             h_values = [None, None]
             low_level_h_timer = timer.time()
@@ -557,8 +557,9 @@ class CBSSolver(object):
                     self.low_lv_h_cache_hit_time += timer.time() - ll_h_timer
                 else:
                     h_values[i] = compute_heuristics(self.my_map, location)
+                    h_values_size = getsizeof(h_values[i])
                     h_cache_size = getsizeof(self.low_lv_h_cache)
-                    while h_cache_size > self.low_lv_h_cache_max_size and len(self.low_lv_h_cache) != 0:
+                    while h_cache_size + h_values_size > self.low_lv_h_cache_max_size and len(self.low_lv_h_cache) != 0:
                         self.low_lv_h_cache_evict_counter += 1
                         self.low_lv_h_cache.popitem()
                         h_cache_size = getsizeof(self.low_lv_h_cache)
@@ -571,13 +572,13 @@ class CBSSolver(object):
             partial_mdd = increased_cost_tree_search(self.my_map, max_cost, cost_offset, h_values[0], h_values[1])
             mdd = mdd | partial_mdd # Set Union
         # Negative Constraints
-        neg_vertex_constraint = [(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == False and len(c['loc']) == 1 and c['timestep'] < min_timestep]
-        neg_edge_constraint = [(c['timestep'], tuple(c['loc'])) for c in constraints if c['positive'] == False and len(c['loc']) == 2 and c['timestep'] < min_timestep]
-        for t, e in neg_edge_constraint:
+        neg_vertex = [(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == False and len(c['loc']) == 1 and c['timestep'] < min_timestep]
+        neg_edge = [(c['timestep'], tuple(c['loc'])) for c in constraints if c['positive'] == False and len(c['loc']) == 2 and c['timestep'] < min_timestep]
+        for t, e in neg_edge:
             if (t, e) in mdd: # mdd may not have the negative edges
                 mdd.remove((t, e))
         # remove vertices and the relating vertices in the next timestep
-        for timestep, vertex in neg_vertex_constraint:
+        for timestep, vertex in neg_vertex:
             edges_to_remove = [(t, e) for t, e in mdd if t == timestep and e[1] == vertex]
             edges_to_remove += [(t, e) for t, e in mdd if t == timestep + 1 and e[0] == vertex]
             for t, e in edges_to_remove:
@@ -785,12 +786,13 @@ class CBSSolver(object):
                             self.mdd_cache_miss += 1
                             cur_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
                             mdds[i] = self.mdd(new_node['paths'][i], cur_constraints)
-                            self.mdds_cache[agent_hash_pair] = mdds[i]
+                            mdd_size = getsizeof(mdds[i])
                             mdd_cache_size = getsizeof(self.mdds_cache)
-                            while mdd_cache_size > self.mdd_cache_max_size and len(self.mdds_cache) != 0:
+                            while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdds_cache) != 0:
                                 self.mdd_evict_counter += 1
                                 self.mdds_cache.popitem()
                                 mdd_cache_size = getsizeof(self.mdds_cache)
+                            self.mdds_cache[agent_hash_pair] = mdds[i]
                             self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
                     new_node['mdds'] = mdds.copy()
                     self.mdd_time += timer.time() - mdd_start
