@@ -835,46 +835,18 @@ class CBSSolver(object):
         print(f'Sum of costs:      {get_sum_of_cost(paths)}')
         print(f'Expanded nodes:    {self.num_of_expanded}')
         print(f'Generated nodes:   {self.num_of_generated}')
-        """
-        # High level heuristics statistics
-        self.ewmvc_mvc_time = 0
-        self.h_cache = OrderedDict()
-        self.h_time = 0
-        self.h_cache_hit_time = 0
-        self.h_cache_miss_time = 0
-        self.h_cache_max_size = 2**20 # 1 Mib, TODO: TUNE HYPERPARAMETER
-        self.h_cache_hit = 0
-        self.h_cache_miss = 0
-        self.h_cache_evict_counter = 0
-
-        # High level caching mdd statistics
-        self.mdds_cache = OrderedDict()
-        self.mdd_time = 0
-        self.mdd_constraint_time = 0
-        self.mdd_clean_up_time = 0
-        self.mdd_cache_hit_time = 0
-        self.mdd_cache_miss_time = 0
-        self.mdd_cache_max_size = 2**20 # in bytes, 2^10=kib, 2^20=Mib, etc. TODO: TUNE HYPERPARAMETER
-        self.mdd_cache_hit = 0
-        self.mdd_cache_miss = 0
-        self.mdd_evict_counter = 0
-
-        # low-level heuristics cache
-        self.low_lv_h_cache = OrderedDict()
-        self.low_lv_h_time = 0
-        self.low_lv_h_cache_hit_time = 0
-        self.low_lv_h_cache_miss_time = 0
-        self.low_lv_h_cache_max_size = 2**20
-        self.low_lv_h_cache_hit = 0
-        self.low_lv_h_cache_miss = 0
-        self.low_lv_h_cache_evict_counter = 0
-        """
         if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
             overhead = self.mdd_time + self.h_time
             search_time = self.CPU_time - overhead
             print(f'    Search time:        {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
             print(f'    Overhead time:      {overhead:.2f} ({overhead / self.CPU_time * 100:05.2f}%)')
             print(f'    Overhead ratio:     {overhead / search_time:.2f}x')
+            print(f'    Heuristics time:    {self.h_time:.2f}')
+            print(f'     - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
+            print(f'     - Hit time:        {self.h_cache_hit_time:.2f} ({self.h_cache_hit_time / self.h_time * 100:05.2f}%)')
+            print(f'     - Miss time:       {self.h_cache_miss_time:.2f} ({self.h_cache_miss_time / self.h_time * 100:05.2f}%)')
+            print(f'     - Hit/miss ratio:  {self.h_cache_hit}:{self.h_cache_miss}')
+            print(f'     - Evicted #:       {self.h_cache_evict_counter}')
             print(f'    MDD time:           {self.mdd_time:.2f}')
             print(f'     - constraint:      {self.mdd_constraint_time:.2f} ({self.mdd_constraint_time / self.mdd_time * 100:05.2f}%)')
             print(f'     - clean up:        {self.mdd_clean_up_time:.2f} ({self.mdd_clean_up_time / self.mdd_time * 100:05.2f}%)')
@@ -882,9 +854,8 @@ class CBSSolver(object):
             print(f'     - Miss time:       {self.mdd_cache_miss_time:.2f} ({self.mdd_cache_miss_time / self.mdd_time * 100:05.2f}%)')
             print(f'     - Hit/miss ratio:  {self.mdd_cache_hit}:{self.mdd_cache_miss}')
             print(f'     - Evicted #:       {self.mdd_evict_counter}')
-            print(f'    Heuristics time:    {self.h_time:.2f}')
-            print(f'     - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
-            print(f'     - Hit time:        {self.h_cache_hit_time:.2f} ({self.h_cache_hit_time / self.h_time * 100:05.2f}%)')
-            print(f'     - Miss time:       {self.h_cache_miss_time:.2f} ({self.h_cache_miss_time / self.h_time * 100:05.2f}%)')
-            print(f'     - Hit/miss ratio:  {self.h_cache_hit}:{self.h_cache_miss}')
-            print(f'     - Evicted #:       {self.h_cache_evict_counter}')
+            print(f'    Dijkstra time:      {self.low_lv_h_time:.2f}')
+            print(f'     - Hit time:        {self.low_lv_h_cache_hit_time:.2f} ({self.low_lv_h_cache_hit_time / self.low_lv_h_time * 100:05.2f}%)')
+            print(f'     - Miss time:       {self.low_lv_h_cache_miss_time:.2f} ({self.low_lv_h_cache_miss_time / self.low_lv_h_time * 100:05.2f}%)')            
+            print(f'     - Hit/miss ratio:  {self.low_lv_h_cache_hit}:{self.low_lv_h_cache_miss}')
+            print(f'     - Evicted #:       {self.low_lv_h_cache_evict_counter}')
