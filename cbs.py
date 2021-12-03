@@ -212,13 +212,6 @@ def joint_dependency_diagram(joint_mdd, mdds, agents, paths, min_timestep, const
     #     print('t:',i,[e for t, e in new_mdds[1] if t == i])
     # print('\n')
 
-    num_of_mdds = len(mdds)
-    constraint_list = [None] * num_of_mdds
-    new_mdds = [None] * num_of_mdds
-    for i in range(num_of_mdds):
-        constraint_list[i] = [c for c in constraints if c['agent'] == agents[i] and c['timestep'] < min_timestep]
-        new_mdds[i] = [(t, e) for t, e in mdds[i] if t < min_timestep]
-        new_mdds[i] = reduce_mdd(new_mdds[i], paths[i], min_timestep, constraint_list[i])
     new_joint_mdd = None
     # joint_mdd_vertices = OrderedDict()
     # joint_mdd_edges = OrderedDict()
@@ -791,7 +784,6 @@ class CBSSolver(object):
                         else:
                             self.mdd_cache_miss += 1
                             cur_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
-                            # mdds[i] = self.reduce_mdd(master_mdds[i], new_node['paths'][i], cur_constraints)
                             mdds[i] = self.mdd(new_node['paths'][i], cur_constraints)
                             # Check space usage before adding reduced MDD
                             agent_mdd_size = getsizeof(mdds[i])
