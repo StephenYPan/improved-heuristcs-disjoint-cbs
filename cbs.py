@@ -440,7 +440,7 @@ class CBSSolver(object):
         self.dg_heuristics = False
         self.wdg_heuristics = False
 
-        # High level heuristics statistics
+        # High level heuristics cache
         self.ewmvc_mvc_time = 0
         self.h_cache = OrderedDict()
         self.h_time = 0
@@ -451,27 +451,38 @@ class CBSSolver(object):
         self.h_cache_miss = 0
         self.h_cache_evict_counter = 0
 
-        # High level caching mdd statistics
-        self.mdds_cache = OrderedDict()
+        # High level mdd cache
+        self.mdd_cache = OrderedDict()
         self.mdd_time = 0
-        self.mdd_constraint_time = 0
+        self.mdd_pos_constraint_time = 0
+        self.mdd_neg_constraint_time = 0
         self.mdd_clean_up_time = 0
         self.mdd_cache_hit_time = 0
         self.mdd_cache_miss_time = 0
-        self.mdd_cache_max_size = 2**20 # in bytes, 2^10=kib, 2^20=Mib, etc. TODO: TUNE HYPERPARAMETER
+        self.mdd_cache_max_size = 2**20 # 1 Mib, TODO: TUNE HYPERPARAMETER
         self.mdd_cache_hit = 0
         self.mdd_cache_miss = 0
         self.mdd_evict_counter = 0
 
-        # low-level heuristics cache
+        # Low-level heuristics cache
         self.low_lv_h_cache = OrderedDict()
         self.low_lv_h_time = 0
         self.low_lv_h_cache_hit_time = 0
         self.low_lv_h_cache_miss_time = 0
-        self.low_lv_h_cache_max_size = 2**20
+        self.low_lv_h_cache_max_size = 2**20 # 1 Mib, TODO: TUNE HYPERPARAMETER
         self.low_lv_h_cache_hit = 0
         self.low_lv_h_cache_miss = 0
         self.low_lv_h_cache_evict_counter = 0
+
+        # Partial mdd cache
+        self.partial_mdd_cache = OrderedDict()
+        self.partial_mdd_time = 0
+        self.partial_mdd_hit_time = 0
+        self.partial_mdd_miss_time = 0
+        self.partial_mdd_max_size = 2**20 # 1 Mib, TODO: TUNE HYPERPARAMETER
+        self.partial_mdd_hit = 0
+        self.partial_mdd_miss = 0
+        self.partial_mdd_evict_counter = 0
 
         # compute heuristics for the low-level search
         ll_h_timer = timer.time()
@@ -533,8 +544,9 @@ class CBSSolver(object):
         """
         mdd = set()
         min_timestep = len(path)
-        constraint_timer = timer.time()
+
         # Positive Constraints
+        pos_constraint_timer = timer.time()
         pos_vertex = set([(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == True and len(c['loc']) == 1 and c['timestep'] < min_timestep])
         pos_edge = [(c['timestep'], tuple(c['loc'])) for c in constraints if c['positive'] == True and len(c['loc']) == 2 and c['timestep'] < min_timestep]
         for t, e in pos_edge:
@@ -543,18 +555,20 @@ class CBSSolver(object):
         pos_vertex.add((0, path[0]))
         pos_vertex.add((min_timestep - 1, path[-1]))
         pos_vertex = sorted(pos_vertex)
+        self.mdd_pos_constraint_time += timer.time() - pos_constraint_timer
+
         # find mdd given intermediary goal nodes
         for start, goal in zip(pos_vertex, pos_vertex[1:]):
-            # check cache for start and goal
-            h_values = [None, None]
+            # check cache for Dijkstra results for start and goal
             low_level_h_timer = timer.time()
+            h_values = [None, None]
             for i, location in enumerate([start[1], goal[1]]):
-                ll_h_timer = timer.time()
+                ll_h_cache_timer = timer.time()
                 if location in self.low_lv_h_cache:
                     h_values[i] = self.low_lv_h_cache[location]
                     self.low_lv_h_cache.move_to_end(location)
                     self.low_lv_h_cache_hit += 1
-                    self.low_lv_h_cache_hit_time += timer.time() - ll_h_timer
+                    self.low_lv_h_cache_hit_time += timer.time() - ll_h_cache_timer
                 else:
                     h_values[i] = compute_heuristics(self.my_map, location)
                     h_values_size = getsizeof(h_values[i])
@@ -565,13 +579,42 @@ class CBSSolver(object):
                         h_cache_size = getsizeof(self.low_lv_h_cache)
                     self.low_lv_h_cache[location] = h_values[i]
                     self.low_lv_h_cache_miss += 1
-                    self.low_lv_h_cache_miss_time += timer.time() - ll_h_timer
+                    self.low_lv_h_cache_miss_time += timer.time() - ll_h_cache_timer
             self.low_lv_h_time += timer.time() - low_level_h_timer
+            # Cache partial mdd for speed up
+            """
+            self.partial_mdd_cache = OrderedDict()
+            self.partial_mdd_time = 0
+            self.partial_mdd_hit_time = 0
+            self.partial_mdd_miss_time = 0
+            self.partial_mdd_max_size = 2**20
+            self.partial_mdd_evict_counter = 0
+            """
+            partial_mdd_timer = timer.time()
             max_cost = goal[0] - start[0] + 1
             cost_offset = start[0]
-            partial_mdd = increased_cost_tree_search(self.my_map, max_cost, cost_offset, h_values[0], h_values[1])
+            partial_mdd = None
+            partial_mdd_key = (cost_offset, max_cost, start[1], goal[1])
+            if partial_mdd_key in self.partial_mdd_cache:
+                partial_mdd = self.partial_mdd_cache[partial_mdd_key]
+                self.partial_mdd_cache.move_to_end(partial_mdd_key)
+                self.partial_mdd_hit += 1
+                self.partial_mdd_hit_time += timer.time() - partial_mdd_timer
+            else:
+                partial_mdd = increased_cost_tree_search(self.my_map, max_cost, cost_offset, h_values[0], h_values[1])
+                partial_mdd_size = getsizeof(partial_mdd)
+                partial_mdd_cache_size = getsizeof(self.partial_mdd_cache)
+                while partial_mdd_cache_size + partial_mdd_size > self.partial_mdd_max_size and len(self.partial_mdd_cache) != 0:
+                    self.partial_mdd_evict_counter += 1
+                    self.partial_mdd_cache.popitem()
+                    partial_mdd_cache_size = getsizeof(self.partial_mdd_cache)
+                self.partial_mdd_cache[partial_mdd_key] = partial_mdd
+                self.partial_mdd_miss += 1
+                self.partial_mdd_miss_time += timer.time() - partial_mdd_timer
             mdd = mdd | partial_mdd # Set Union
+            self.partial_mdd_time += timer.time() - partial_mdd_timer
         # Negative Constraints
+        neg_constraint_timer = timer.time()
         neg_vertex = [(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == False and len(c['loc']) == 1 and c['timestep'] < min_timestep]
         neg_edge = [(c['timestep'], tuple(c['loc'])) for c in constraints if c['positive'] == False and len(c['loc']) == 2 and c['timestep'] < min_timestep]
         for t, e in neg_edge:
@@ -583,10 +626,9 @@ class CBSSolver(object):
             edges_to_remove += [(t, e) for t, e in mdd if t == timestep + 1 and e[0] == vertex]
             for t, e in edges_to_remove:
                 mdd.remove((t, e))
-        self.mdd_constraint_time += timer.time() - constraint_timer
-
-        clean_up_timer = timer.time()
+        self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
         # Remove non-connecting nodes
+        clean_up_timer = timer.time()
         for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without parents
             cur_layer = set([e[0] for t, e in mdd if t == i])
             prev_layer = [(t, e) for t, e in mdd if t == i - 1]
@@ -625,8 +667,9 @@ class CBSSolver(object):
                 min_timestep = min(len(paths[a1]), len(paths[a2]))
                 conflict_mdds = [mdds[a1], mdds[a2]]
                 is_cardinal_conflict = find_cardinal_conflict(conflict_mdds, min_timestep)
+                bool_size = getsizeof(is_cardinal_conflict)
                 h_cache_size = getsizeof(self.h_cache)
-                while h_cache_size > self.h_cache_max_size and len(self.h_cache) != 0:
+                while h_cache_size + bool_size > self.h_cache_max_size and len(self.h_cache) != 0:
                     self.h_cache_evict_counter += 1
                     self.h_cache.popitem()
                     h_cache_size = getsizeof(self.h_cache)
@@ -640,9 +683,9 @@ class CBSSolver(object):
             E += 1
         if E == 1: # Has to be 1 vertex
             return 1
-        mvc_start = timer.time()
+        mvc_timer = timer.time()
         min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
-        self.ewmvc_mvc_time += timer.time() - mvc_start
+        self.ewmvc_mvc_time += timer.time() - mvc_timer
         return min_vertex_cover_value
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
@@ -693,7 +736,7 @@ class CBSSolver(object):
             for i in range(self.num_of_agents):
                 agent_i_constraints = [c for c in root['constraints'] if c['agent'] == i]
                 mdds[i] = self.mdd(root['paths'][i], agent_i_constraints)
-                self.mdds_cache[(i, hash(frozenset(agent_i_constraints)))] = mdds[i]
+                self.mdd_cache[(i, hash(frozenset(agent_i_constraints)))] = mdds[i]
             root['mdds'] = mdds.copy()
             self.mdd_time += timer.time() - mdd_start
 
@@ -777,9 +820,9 @@ class CBSSolver(object):
                         mdd_cache_timer = timer.time()
                         hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i]))
                         agent_hash_pair = (i, hash_value)
-                        if agent_hash_pair in self.mdds_cache:
-                            mdds[i] = self.mdds_cache[agent_hash_pair]
-                            self.mdds_cache.move_to_end(agent_hash_pair)
+                        if agent_hash_pair in self.mdd_cache:
+                            mdds[i] = self.mdd_cache[agent_hash_pair]
+                            self.mdd_cache.move_to_end(agent_hash_pair)
                             self.mdd_cache_hit += 1
                             self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
                         else:
@@ -787,12 +830,12 @@ class CBSSolver(object):
                             agent_i_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
                             mdds[i] = self.mdd(new_node['paths'][i], agent_i_constraints)
                             mdd_size = getsizeof(mdds[i])
-                            mdd_cache_size = getsizeof(self.mdds_cache)
-                            while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdds_cache) != 0:
+                            mdd_cache_size = getsizeof(self.mdd_cache)
+                            while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
                                 self.mdd_evict_counter += 1
-                                self.mdds_cache.popitem()
-                                mdd_cache_size = getsizeof(self.mdds_cache)
-                            self.mdds_cache[agent_hash_pair] = mdds[i]
+                                self.mdd_cache.popitem()
+                                mdd_cache_size = getsizeof(self.mdd_cache)
+                            self.mdd_cache[agent_hash_pair] = mdds[i]
                             self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
                     new_node['mdds'] = mdds.copy()
                     self.mdd_time += timer.time() - mdd_start
@@ -830,22 +873,31 @@ class CBSSolver(object):
             print(f'Search time:        {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
             print(f'Overhead time:      {overhead:.2f} ({overhead / self.CPU_time * 100:05.2f}%)')
             print(f'Overhead ratio:     {overhead / search_time:.2f}x')
+            print(f'Heuristics cache:   {getsizeof(self.h_cache)} (bytes)')
             print(f'Heuristics time:    {self.h_time:.2f}')
             print(f' - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
             print(f' - Hit time:        {self.h_cache_hit_time:.2f} ({self.h_cache_hit_time / self.h_time * 100:05.2f}%)')
             print(f' - Miss time:       {self.h_cache_miss_time:.2f} ({self.h_cache_miss_time / self.h_time * 100:05.2f}%)')
             print(f' - Hit/miss ratio:  {self.h_cache_hit}:{self.h_cache_miss}')
             print(f' - Evicted #:       {self.h_cache_evict_counter}')
+            print(f'MDD cache:          {getsizeof(self.mdd_cache)} (bytes)')
             print(f'MDD time:           {self.mdd_time:.2f}')
             print(f' - Hit time:        {self.mdd_cache_hit_time:.2f} ({self.mdd_cache_hit_time / self.mdd_time * 100:05.2f}%)')
             print(f' - Miss time:       {self.mdd_cache_miss_time:.2f} ({self.mdd_cache_miss_time / self.mdd_time * 100:05.2f}%)')
-            print(f'    - Construction:      {self.mdd_constraint_time:.2f}')
-            print(f'       - Filter time:         {abs(self.mdd_constraint_time - self.low_lv_h_time):.2f}')
-            print(f'       - Dijkstra time:       {self.low_lv_h_time:.2f}')
-            print(f'          - Hit time:         {self.low_lv_h_cache_hit_time:.2f}')
-            print(f'          - Miss time:        {self.low_lv_h_cache_miss_time:.2f}')            
-            print(f'          - Hit/miss ratio:   {self.low_lv_h_cache_hit}:{self.low_lv_h_cache_miss}')
-            print(f'          - Evicted #:        {self.low_lv_h_cache_evict_counter}')
+            print(f'    - Positive time:     {self.mdd_pos_constraint_time:.2f}')
+            print(f'    - Dijkstra cache:    {getsizeof(self.low_lv_h_cache)} (bytes)')
+            print(f'    - Dijkstra time:     {self.low_lv_h_time:.2f}')
+            print(f'       - Hit time:       {self.low_lv_h_cache_hit_time:.2f}')
+            print(f'       - Miss time:      {self.low_lv_h_cache_miss_time:.2f}')            
+            print(f'       - Hit/miss ratio: {self.low_lv_h_cache_hit}:{self.low_lv_h_cache_miss}')
+            print(f'       - Evicted #:      {self.low_lv_h_cache_evict_counter}')
+            print(f'    - Partial MDD cache: {getsizeof(self.partial_mdd_cache)} (bytes)')
+            print(f'    - Partial MDD time:  {self.partial_mdd_time:.2f}')
+            print(f'       - Hit time:       {self.partial_mdd_hit_time:.2f}')
+            print(f'       - Miss time:      {self.partial_mdd_miss_time:.2f}')            
+            print(f'       - Hit/miss ratio: {self.partial_mdd_hit}:{self.partial_mdd_miss}')
+            print(f'       - Evicted #:      {self.partial_mdd_evict_counter}')
+            print(f'    - Negative time:     {self.mdd_neg_constraint_time:.2f}')
             print(f'    - Clean up:          {self.mdd_clean_up_time:.2f}')
             print(f' - Hit/miss ratio:  {self.mdd_cache_hit}:{self.mdd_cache_miss}')
             print(f' - Evicted #:       {self.mdd_evict_counter}')
