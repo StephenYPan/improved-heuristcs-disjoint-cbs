@@ -182,69 +182,10 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
     return None  # Failed to find solutions
 
 
-def increased_cost_tree_search(my_map, start_loc, max_path_cost, start_h_values, goal_h_values):
-    """ agent 2
-        Start h_values:
-        7 6 @ 6 5 6 7 8 
-        6 5 6 @ 4 5 6 7 
-        5 4 @ 2 3 4 5 6 
-        4 3 2 1 2 3 4 5 
-        3 2 1 0 1 2 3 @ 
-        4 3 2 1 2 @ 4 5 
-        5 4 3 2 3 4 @ 6 
-        6 5 4 3 4 5 6 7
-
-        Goal h_values
-        2 1 @ 9 8 9 . .
-        1 0 1 @ 7 8 9 . 
-        2 1 @ 5 6 7 8 9 
-        3 2 3 4 5 6 7 8 
-        4 3 4 5 6 7 8 @ 
-        5 4 5 6 7 @ 9 . 
-        6 5 6 7 8 9 @ . 
-        7 6 7 8 9 . . .
-
-        Sum
-        9 7 @ . . . . . 
-        7 5 7 @ . . . . 
-        7 5 @ 7 9 . . . 
-        7 5 5 5 7 9 . . 
-        7 5 5 5 7 9 . @ 
-        9 7 7 7 9 @ . . 
-        . 9 9 9 . . @ . 
-        . . . . . . . .
-
-        Partial Start
-        . . @ . . . . . 
-        . 5 . @ . . . . 
-        . 4 @ . . . . . 
-        . 3 2 1 . . . . 
-        . 2 1 0 . . . @ 
-        . . . . . @ . . 
-        . . . . . . @ . 
-        . . . . . . . . 
-
-        Partial Goal
-        . . @ . . . . . 
-        . 0 . @ . . . . 
-        . 1 @ . . . . . 
-        . 2 3 4 . . . . 
-        . 3 4 5 . . . @ 
-        . . . . . @ . . 
-        . . . . . . @ . 
-        . . . . . . . . 
-
-        h_start + h_goal < max_path_cost, filter condition to get all viable cells
-        timestep + h_goal < max_path_cost 
-
-        sanity check:
-        python3 run_experiments.py --instance "subsetinstances/test_1.txt" --solver CBS --batch --disjoint --cg
-    """
+def increased_cost_tree_search(my_map, max_cost, cost_offset, start_h_values, goal_h_values):
     ict = set()
-    ict.add((0, start_loc))
-
-    viable_locations = [(v, h) for v, h in start_h_values.items() if h + goal_h_values[v] < max_path_cost]
-    for t in range(max_path_cost):
+    viable_locations = [(v, h) for v, h in start_h_values.items() if h + goal_h_values[v] < max_cost]
+    for t in range(max_cost):
         cur_locations = [v for v, h in viable_locations if h <= t]
         for v in cur_locations:
             for direction in range(5):
@@ -253,42 +194,7 @@ def increased_cost_tree_search(my_map, start_loc, max_path_cost, start_h_values,
                 if is_invalid_move(my_map, next_v):
                     continue
                 # Check if the next vertex can reach the goal
-                if next_t + goal_h_values[(next_v)] >= max_path_cost:
+                if next_t + goal_h_values[(next_v)] >= max_cost:
                     continue
-                ict.add((next_t, (v, next_v)))
-    return ict
-
-def custom_increased_cost_tree_search(my_map, start_loc, min_path_cost, max_path_cost, start_h_values):
-    """ agent 2
-        Start h_values:
-        7 6 @ 6 5 6 7 8 
-        6 5 6 @ 4 5 6 7 
-        5 4 @ 2 3 4 5 6 
-        4 3 2 1 2 3 4 5 
-        3 2 1 0 1 2 3 @ 
-        4 3 2 1 2 @ 4 5 
-        5 4 3 2 3 4 @ 6 
-        6 5 4 3 4 5 6 7
-
-        sanity check:
-        python3 run_experiments.py --instance "subsetinstances/test_1.txt" --solver CBS --batch --disjoint --cg
-    """
-    ict = set()
-    if min_path_cost == 0:
-        ict.add((0, start_loc))
-    lower_h_values = [(k, min_path_cost) for k, v in start_h_values.items() if v < min_path_cost]
-    upper_h_values = [(k, v) for k, v in start_h_values.items() if v >= min_path_cost]
-    new_h_values =  lower_h_values + upper_h_values
-
-    for i in range(min_path_cost, max_path_cost):
-        lower_list = [(v, t) for v, t in new_h_values if t == i]
-        upper_list = [(v, t) for v, t in new_h_values if t > i]
-        new_h_values = upper_list + [(v, t + 1) for v, t in lower_list]
-        for v, t in lower_list:
-            for direction in range(5):
-                next_v = move(v, direction)
-                next_t = t + 1
-                if is_invalid_move(my_map, next_v):
-                    continue
-                ict.add((next_t, (v, next_v)))
+                ict.add((next_t + cost_offset, (v, next_v)))
     return ict
