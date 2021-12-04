@@ -848,7 +848,7 @@ class CBSSolver(object):
             search_time = self.CPU_time - overhead
             print(f'Search time:        {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
             print(f'Overhead time:      {overhead:.2f} ({overhead / self.CPU_time * 100:05.2f}%)')
-            print(f'Overhead ratio:     {overhead / search_time:.2f}x')
+            print(f'Overhead ratio:     {overhead / search_time:.2f}:1')
             print(f'Heuristics cache:   {getsizeof(self.h_cache)} (bytes)')
             print(f'Heuristics time:    {self.h_time:.2f}')
             print(f' - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
