@@ -188,11 +188,11 @@ def find_cardinal_conflict(mdds, min_timestep):
     for i in range(1, min_timestep):
         agent1_edge = set([(v, u) for t, (u, v) in mdds[0] if t == i])
         agent2_edge = set([e for t, e in mdds[1] if t == i])
+        if max(len(agent1_edge), len(agent2_edge)) == 1 and agent1_edge == agent2_edge:
+            return True
         agent1_vertex = set([e[0] for e in agent1_edge])
         agent2_vertex = set([e[1] for e in agent2_edge])
         if max(len(agent1_vertex), len(agent2_vertex)) == 1 and agent1_vertex == agent2_vertex:
-            return True
-        if max(len(agent1_edge), len(agent2_edge)) == 1 and agent1_edge == agent2_edge:
             return True
     return False
 
@@ -613,17 +613,15 @@ class CBSSolver(object):
         # Remove non-connecting nodes
         clean_up_timer = timer.time()
         for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without parents
-            cur_layer = set([e[0] for t, e in mdd if t == i])
-            prev_layer = [(t, e) for t, e in mdd if t == i - 1]
-            for t, e in prev_layer:
-                if e[1] not in cur_layer:
-                    mdd.remove((t, e))
+            cur_vertex = set([e[0] for t, e in mdd if t == i])
+            prev_layer = [e for t, e in mdd if t == i - 1 and e[1] not in cur_vertex]
+            for e in prev_layer:
+                mdd.remove((i - 1, e))
         for i in range(1, min_timestep - 1): # Remove forward, nodes without children
-            cur_layer = set([e[1] for t, e in mdd if t == i])
-            next_layer = [(t, e) for t, e in mdd if t == i + 1]
-            for t, e in next_layer:
-                if e[0] not in cur_layer:
-                    mdd.remove((t, e))
+            cur_vertex = set([e[1] for t, e in mdd if t == i])
+            next_layer = [e for t, e in mdd if t == i + 1 and e[0] not in cur_vertex]
+            for e in next_layer:
+                mdd.remove((i + 1, e))
         self.mdd_clean_up_time += timer.time() - clean_up_timer
         return mdd
 
