@@ -485,17 +485,9 @@ class CBSSolver(object):
         self.partial_mdd_evict_counter = 0
 
         # compute heuristics for the low-level search
-        ll_h_timer = timer.time()
         self.goal_heuristics = []
-        self.start_heuristics = []
-        for start, goal in zip(self.starts, self.goals):
-            start_h_values = compute_heuristics(my_map, start)
-            goal_h_values = compute_heuristics(my_map, goal)
-            self.start_heuristics.append(start_h_values)
-            self.goal_heuristics.append(goal_h_values)
-            self.low_lv_h_cache[start] = start_h_values
-            self.low_lv_h_cache[goal] = goal_h_values
-        self.low_lv_h_time += timer.time() - ll_h_timer
+        for goal in self.goals:
+            self.goal_heuristics.append(compute_heuristics(my_map, goal))
 
     def push_node(self, node):
         g_value = 0
@@ -586,7 +578,7 @@ class CBSSolver(object):
             max_cost = goal[0] - start[0] + 1
             cost_offset = start[0]
             partial_mdd = None
-            partial_mdd_key = (cost_offset, max_cost, start[1], goal[1])
+            partial_mdd_key = (max_cost, cost_offset, start[1], goal[1])
             if partial_mdd_key in self.partial_mdd_cache:
                 partial_mdd = self.partial_mdd_cache[partial_mdd_key]
                 self.partial_mdd_cache.move_to_end(partial_mdd_key)
@@ -815,7 +807,6 @@ class CBSSolver(object):
                             self.mdd_cache_hit += 1
                             self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
                         else:
-                            self.mdd_cache_miss += 1
                             agent_i_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
                             mdds[i] = self.mdd(new_node['paths'][i], agent_i_constraints)
                             mdd_size = getsizeof(mdds[i])
@@ -825,6 +816,7 @@ class CBSSolver(object):
                                 self.mdd_cache.popitem()
                                 mdd_cache_size = getsizeof(self.mdd_cache)
                             self.mdd_cache[agent_hash_pair] = mdds[i]
+                            self.mdd_cache_miss += 1
                             self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
                     new_node['mdds'] = mdds.copy()
                     self.mdd_time += timer.time() - mdd_start
