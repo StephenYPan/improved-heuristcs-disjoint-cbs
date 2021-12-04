@@ -188,11 +188,11 @@ def find_cardinal_conflict(mdds, min_timestep):
     for i in range(1, min_timestep):
         agent1_edge = set([(v, u) for t, (u, v) in mdds[0] if t == i])
         agent2_edge = set([e for t, e in mdds[1] if t == i])
-        if max(len(agent1_edge), len(agent2_edge)) == 1 and agent1_edge == agent2_edge:
+        if len(agent1_edge) == 1 and len(agent2_edge) == 1 and agent1_edge == agent2_edge:
             return True
         agent1_vertex = set([e[0] for e in agent1_edge])
         agent2_vertex = set([e[1] for e in agent2_edge])
-        if max(len(agent1_vertex), len(agent2_vertex)) == 1 and agent1_vertex == agent2_vertex:
+        if len(agent1_vertex) == 1 and len(agent2_vertex) == 1 and agent1_vertex == agent2_vertex:
             return True
     return False
 
