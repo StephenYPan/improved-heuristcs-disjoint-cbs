@@ -606,8 +606,7 @@ class CBSSolver(object):
                 mdd.remove((t, e))
         # Remove vertices and the relating vertices in the next timestep
         for timestep, vertex in neg_vertex:
-            edges_to_remove = [(t, e) for t, e in mdd if t == timestep and e[1] == vertex]
-            edges_to_remove += [(t, e) for t, e in mdd if t == timestep + 1 and e[0] == vertex]
+            edges_to_remove = [(t, e) for t, e in mdd if (t == timestep and e[1] == vertex) or (t == timestep + 1 and e[0] == vertex)]
             for t, e in edges_to_remove:
                 mdd.remove((t, e))
         self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
@@ -809,6 +808,8 @@ class CBSSolver(object):
                         else:
                             agent_i_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
                             mdds[i] = self.mdd(new_node['paths'][i], agent_i_constraints)
+                            # if mdds[i] != self.check_mdd(new_node['paths'][i], agent_i_constraints):
+                            #     raise BaseException('Not valid MDD')
                             mdd_size = getsizeof(mdds[i])
                             mdd_cache_size = getsizeof(self.mdd_cache)
                             while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
