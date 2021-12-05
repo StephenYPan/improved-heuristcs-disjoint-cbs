@@ -596,18 +596,23 @@ class CBSSolver(object):
             self.partial_mdd_time += timer.time() - partial_mdd_timer
         # Negative Constraints
         neg_constraint_timer = timer.time()
-        neg_vertex = [(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == False and len(c['loc']) == 1 and c['timestep'] < min_timestep]
-        neg_edge = [(c['timestep'], tuple(c['loc'])) for c in constraints if c['positive'] == False and len(c['loc']) == 2 and c['timestep'] < min_timestep]
-        for t, e in neg_edge:
-            if (t, e) in mdd: # MDD may not have the negative edges
-                mdd.remove((t, e))
-        # Remove vertices and the relating vertices in the next timestep
-        for timestep, vertex in neg_vertex:
-            edges_to_remove = [(t, e) for t, e in mdd if (t == timestep and e[1] == vertex) or (t == timestep + 1 and e[0] == vertex)]
-            for t, e in edges_to_remove:
-                mdd.remove((t, e))
+        neg_constraints = [(c['timestep'], c['loc']) for c in constraints if c['positive'] == False and c['timestep'] < min_timestep]
+        if len(neg_constraints) == 0: #  Exit early, MDD was not modified
+            self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
+            return mdd
+        for timestep, loc in neg_constraints:
+            if len(loc) == 1:
+                v = loc[0]
+                # Remove vertices and the relating vertices in the next timestep
+                edges_to_remove = [(t, e) for t, e in mdd if (t == timestep and e[1] == v) or (t == timestep + 1 and e[0] == v)]
+                for t, e in edges_to_remove:
+                    mdd.remove((t, e))
+            else:
+                e = tuple(loc)
+                if (timestep, e) in mdd: # MDD may not have the negative edge
+                    mdd.remove((timestep, e))
         self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
-        # Remove non-connecting nodes
+        # Clean up, remove non-connecting nodes
         clean_up_timer = timer.time()
         for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without children
             cur_vertex = set([e[0] for t, e in mdd if t == i])
