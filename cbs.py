@@ -185,8 +185,8 @@ def find_cardinal_conflict(mdds, min_timestep):
     return true if there exists a cardinal conflict, otherwise false.
     """
     for i in range(1, min_timestep):
-        agent1_edge = set([(v, u) for t, (u, v) in mdds[0] if t == i])
-        agent2_edge = set([e for t, e in mdds[1] if t == i])
+        agent1_edge = [(v, u) for t, (u, v) in mdds[0] if t == i]
+        agent2_edge = [e for t, e in mdds[1] if t == i]
         if len(agent1_edge) == 1 and len(agent2_edge) == 1 and agent1_edge == agent2_edge:
             return True
         agent1_vertex = set([e[0] for e in agent1_edge])
