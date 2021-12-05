@@ -1,5 +1,4 @@
 from logging import raiseExceptions
-from os import times
 from sys import getsizeof
 import time as timer
 import heapq
@@ -536,7 +535,6 @@ class CBSSolver(object):
         """
         mdd = set()
         min_timestep = len(path)
-
         # Positive Constraints
         pos_constraint_timer = timer.time()
         pos_vertex = set([(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == True and len(c['loc']) == 1 and c['timestep'] < min_timestep])
@@ -548,7 +546,6 @@ class CBSSolver(object):
         pos_vertex.add((min_timestep - 1, path[-1]))
         pos_vertex = sorted(pos_vertex)
         self.mdd_pos_constraint_time += timer.time() - pos_constraint_timer
-
         # Find MDD given intermediary goal nodes
         for start, goal in zip(pos_vertex, pos_vertex[1:]):
             # Cache Dijkstra results for start and goal locations
