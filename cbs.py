@@ -616,14 +616,16 @@ class CBSSolver(object):
         clean_up_timer = timer.time()
         for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without children
             cur_vertex = set([e[0] for t, e in mdd if t == i])
-            prev_layer = [e for t, e in mdd if t == i - 1 and e[1] not in cur_vertex]
+            prev_t = i - 1
+            prev_layer = [e for t, e in mdd if t == prev_t and e[1] not in cur_vertex]
             for e in prev_layer:
-                mdd.remove((i - 1, e))
+                mdd.remove((prev_t, e))
         for i in range(1, min_timestep - 1): # Remove forward, nodes without parents
             cur_vertex = set([e[1] for t, e in mdd if t == i])
-            next_layer = [e for t, e in mdd if t == i + 1 and e[0] not in cur_vertex]
+            next_t = i + 1
+            next_layer = [e for t, e in mdd if t == next_t and e[0] not in cur_vertex]
             for e in next_layer:
-                mdd.remove((i + 1, e))
+                mdd.remove((next_t, e))
         self.mdd_clean_up_time += timer.time() - clean_up_timer
         return mdd
 
