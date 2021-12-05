@@ -609,12 +609,12 @@ class CBSSolver(object):
         self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
         # Remove non-connecting nodes
         clean_up_timer = timer.time()
-        for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without parents
+        for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without children
             cur_vertex = set([e[0] for t, e in mdd if t == i])
             prev_layer = [e for t, e in mdd if t == i - 1 and e[1] not in cur_vertex]
             for e in prev_layer:
                 mdd.remove((i - 1, e))
-        for i in range(1, min_timestep - 1): # Remove forward, nodes without children
+        for i in range(1, min_timestep - 1): # Remove forward, nodes without parents
             cur_vertex = set([e[1] for t, e in mdd if t == i])
             next_layer = [e for t, e in mdd if t == i + 1 and e[0] not in cur_vertex]
             for e in next_layer:
