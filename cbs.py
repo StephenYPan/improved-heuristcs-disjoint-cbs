@@ -537,11 +537,16 @@ class CBSSolver(object):
         min_timestep = len(path)
         # Positive Constraints
         pos_constraint_timer = timer.time()
-        pos_vertex = set([(c['timestep'], c['loc'][0]) for c in constraints if c['positive'] == True and len(c['loc']) == 1 and c['timestep'] < min_timestep])
-        pos_edge = [(c['timestep'], tuple(c['loc'])) for c in constraints if c['positive'] == True and len(c['loc']) == 2 and c['timestep'] < min_timestep]
-        for t, e in pos_edge:
-            pos_vertex.add((t - 1, e[0]))
-            pos_vertex.add((t, e[1]))
+        pos_constraints = [(c['timestep'], c['loc']) for c in constraints if c['positive'] == True and c['timestep'] < min_timestep]
+        pos_vertex = set()
+        for timestep, loc in pos_constraints:
+            if len(loc) == 1:
+                loc = loc[0]
+                pos_vertex.add((timestep, loc))
+            else:
+                loc = tuple(loc)
+                pos_vertex.add((timestep - 1, loc[0]))
+                pos_vertex.add((timestep, loc[1]))
         pos_vertex.add((0, path[0]))
         pos_vertex.add((min_timestep - 1, path[-1]))
         pos_vertex = sorted(pos_vertex)
@@ -602,15 +607,15 @@ class CBSSolver(object):
             return mdd
         for timestep, loc in neg_constraints:
             if len(loc) == 1:
-                v = loc[0]
+                loc = loc[0]
                 # Remove vertices and the relating vertices in the next timestep
-                edges_to_remove = [(t, e) for t, e in mdd if (t == timestep and e[1] == v) or (t == timestep + 1 and e[0] == v)]
+                edges_to_remove = [(t, e) for t, e in mdd if (t == timestep and e[1] == loc) or (t == timestep + 1 and e[0] == loc)]
                 for t, e in edges_to_remove:
                     mdd.remove((t, e))
             else:
-                e = tuple(loc)
-                if (timestep, e) in mdd: # MDD may not have the negative edge
-                    mdd.remove((timestep, e))
+                loc = tuple(loc)
+                if (timestep, loc) in mdd: # MDD may not have the negative edge
+                    mdd.remove((timestep, loc))
         self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
         # Clean up, remove non-connecting nodes
         clean_up_timer = timer.time()
