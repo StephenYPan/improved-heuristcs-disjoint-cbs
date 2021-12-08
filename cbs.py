@@ -25,8 +25,6 @@ def detect_collision(path1, path2):
 def detect_collisions(paths):
     result = []
     num_agents = len(paths)
-    freq_row = [0] * num_agents
-    freq_col = [0] * num_agents
     for i in range(num_agents - 1):
         for j in range(i + 1, num_agents):
             collision = detect_collision(paths[i], paths[j])
@@ -39,18 +37,6 @@ def detect_collisions(paths):
                 'loc': collision,
                 'timestep': timestep
             })
-            freq_row[i] += 1
-            freq_col[j] += 1
-    """
-    python3 run_experiments.py --instance "instances/test_*" --disjoint --solver CBS --batch
-    python3 run_experiments.py --instance "instances/test_47.txt" --disjoint --solver CBS --batch
-    python3 run_experiments.py --instance "bettertest/test_*" --disjoint --solver CBS --batch
-
-    Conflicts at later timesteps is similar to cardinal conflicts. Picking conflicts at earlier
-    timesteps will result in wasted work as it is likely to be a non-cardinal conflict, meaning
-    the conflict happening at a later timestep still needs to be resolved.
-    """
-    # result.sort(key=lambda k: (k['timestep'], len(k['loc']), -(freq_row[k['a1']] + freq_col[k['a2']])))
     return result
 
 
@@ -489,7 +475,7 @@ class CBSSolver(object):
             self.goal_heuristics.append(compute_heuristics(my_map, goal))
 
     def push_node(self, node):
-        g_value = 0
+        # TODO: Tie breaking method, num of collisions?
         h_value = 0
         if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
             g_value = node['cost']
