@@ -58,6 +58,17 @@ def standard_splitting(collision):
 
 
 def disjoint_splitting(collision):
+    """
+    Disjoint splitting splits at a 50/50 probability. Is it worth it to tailor the probability
+    based on the number of conflicts an agent has relative to the other agent?
+
+    Which agent should be given more probabilities? The one with more 
+    cardinal/semi-cardinal/dependency conflicts? Or the one with fewer conflicts?
+    
+    Which type of conflict should increase/decrease the probabilities?
+
+    Is it worth doing this at all?
+    """
     result = standard_splitting(collision)
     rand_agent = random.randint(0, 1)
     for i, predicate in zip([0, 1], [True, False]):
