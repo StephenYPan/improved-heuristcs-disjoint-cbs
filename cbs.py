@@ -497,25 +497,24 @@ class CBSSolver(object):
             self.goal_heuristics.append(compute_heuristics(my_map, goal))
 
     def push_node(self, node):
-        # TODO: Tie breaking method, num of collisions?
         g_value = node['cost']
         h_value = node['h_value']
         tie_break = len(node['collisions'])
         if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
-            heapq.heappush(self.open_list, (g_value + h_value, h_value, tie_break, self.num_of_generated, node))
+            f_value = g_value + h_value
+            heapq.heappush(self.open_list, (f_value, h_value, tie_break, self.num_of_generated, node))
         else:
             heapq.heappush(self.open_list, (g_value, h_value, tie_break, self.num_of_generated, node))
         # if self.stats:
-        #     print('push - ', 'sum:', g_value + h_value, ' h-value:', h_value)
+        #     print('push - ', 'sum:', g_value + h_value, ' h-value:', h_value, 'tie:', tie_break)
         # print("Generate node {}".format(self.num_of_generated))
         self.num_of_generated += 1
 
     def pop_node(self):
         _, _, _, id, node = heapq.heappop(self.open_list)
-        # g, h, id, node = heapq.heappop(self.open_list)
+        # g, h, tie_break, id, node = heapq.heappop(self.open_list)
         # if self.stats:
-        #     print(' pop - ', 'sum:', g, ' h-value:', h)
-        #     print(' pop - ', 'sum:', gh, ' h-value:', h)
+        #     print(' pop - ', 'f-value:', g, ' h-value:', h, 'tie:', tie_break)
         # print("Expand node {}".format(id))
         self.num_of_expanded += 1
         return node
