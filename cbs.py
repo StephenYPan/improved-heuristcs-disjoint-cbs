@@ -698,11 +698,6 @@ class CBSSolver(object):
 
         self.start_time = timer.time()
 
-        # Generate the root node
-        # constraints   - list of constraints
-        # paths         - list of paths, one for each agent
-        #               [[(x11, y11), (x12, y12), ...], [(x21, y21), (x22, y22), ...], ...]
-        # collisions     - list of collisions in paths
         root = {
             'cost': 0,
             'h_value': 0,
