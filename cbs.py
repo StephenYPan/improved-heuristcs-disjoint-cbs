@@ -71,8 +71,11 @@ def disjoint_splitting(collision, mdds):
     a2_weight = len([e for t, e in mdds[result[1]['agent']] if t == result[0]['timestep']])
     cum_weights = [a2_weight, a1_weight + a2_weight]
     if not a1_weight or not a2_weight: # Special case, if either are zero
-        cum_weights = [a1_weight, a1_weight + a2_weight]
-    population = [[result[0]['agent'], result[0]['loc']], [result[1]['agent'], result[1]['loc']]]
+        cum_weights = [a1_weight, a1_weight + a2_weight]   
+    population = [
+        [result[0]['agent'], result[0]['loc']],
+        [result[1]['agent'], result[1]['loc']]
+    ]
     chosen_agent = random.choices(population=population,cum_weights=cum_weights)[0]
     for i, predicate in zip([0, 1], [True, False]):
         result[i]['agent'] = chosen_agent[0]
@@ -604,6 +607,8 @@ class CBSSolver(object):
                 self.partial_mdd_miss_time += timer.time() - partial_mdd_timer
             mdd = mdd | partial_mdd # Set union
             self.partial_mdd_time += timer.time() - partial_mdd_timer
+        for i, e in enumerate(zip(path, path[1:])):
+            assert ((i + 1, e) in mdd) is True, 'path and mdd don\'t match'
         # Negative Constraints
         neg_constraint_timer = timer.time()
         neg_constraints = [(c['timestep'], c['loc']) for c in constraints if c['positive'] == False and c['timestep'] < min_timestep]
