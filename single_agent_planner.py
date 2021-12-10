@@ -27,27 +27,22 @@ def compute_heuristics(my_map, goal):
     heapq.heappush(open_list, (root['cost'], goal, root))
     closed_list[goal] = root
     while len(open_list) > 0:
-        (cost, loc, cur) = heapq.heappop(open_list)
+        (cost, loc, _) = heapq.heappop(open_list)
         for dir in range(4):
-            child_loc = move(loc, dir)
-            child_cost = cost + 1
-            if is_invalid_move(my_map, child_loc):
+            next_loc = move(loc, dir)
+            next_cost = cost + 1
+            if is_invalid_move(my_map, next_loc):
                 continue
-            # if child_loc[0] < 0 or child_loc[0] >= len(my_map) \
-            #    or child_loc[1] < 0 or child_loc[1] >= len(my_map[0]):
-            #    continue
-            # if my_map[child_loc[0]][child_loc[1]]:
-            #     continue
-            child = {'loc': child_loc, 'cost': child_cost}
-            if child_loc in closed_list:
-                existing_node = closed_list[child_loc]
-                if existing_node['cost'] > child_cost:
-                    closed_list[child_loc] = child
+            new_node = {'loc': next_loc, 'cost': next_cost}
+            if next_loc in closed_list:
+                existing_node = closed_list[next_loc]
+                if existing_node['cost'] > next_cost:
+                    closed_list[next_loc] = new_node
                     # open_list.delete((existing_node['cost'], existing_node['loc'], existing_node))
-                    heapq.heappush(open_list, (child_cost, child_loc, child))
+                    heapq.heappush(open_list, (next_cost, next_loc, new_node))
             else:
-                closed_list[child_loc] = child
-                heapq.heappush(open_list, (child_cost, child_loc, child))
+                closed_list[next_loc] = new_node
+                heapq.heappush(open_list, (next_cost, next_loc, new_node))
 
     # build the heuristics table
     h_values = dict()
@@ -62,10 +57,10 @@ def get_location(path, time):
 
 def get_path(goal_node):
     path = []
-    cur = goal_node
-    while cur is not None:
-        path.append(cur['loc'])
-        cur = cur['parent']
+    cur_node = goal_node
+    while cur_node is not None:
+        path.append(cur_node['loc'])
+        cur_node = cur_node['parent']
     path.reverse()
     return path
 
@@ -75,8 +70,8 @@ def push_node(open_list, node):
 
 
 def pop_node(open_list):
-    _, _, _, cur = heapq.heappop(open_list)
-    return cur
+    _, _, _, node = heapq.heappop(open_list)
+    return node
 
 
 def compare_nodes(n1, n2):
@@ -110,16 +105,16 @@ def build_constraint_table(constraints, agent):
     return (neg_constraint_table, pos_constraint_table)
 
 
-def is_constrained(cur_loc, next_loc, next_time, constraint_table):
+def is_constrained(cur_loc, next_loc, next_t, constraint_table):
     # Check vertex
-    if (next_loc, next_time) in constraint_table:
+    if (next_loc, next_t) in constraint_table:
         return True
     # Check edge
-    if ((cur_loc, next_loc), next_time) in constraint_table:
+    if ((cur_loc, next_loc), next_t) in constraint_table:
         return True
     # Check for other agents that have reached their goal and stopped
     if (next_loc) in constraint_table:
-        return next_time >= constraint_table[next_loc]
+        return next_t >= constraint_table[next_loc]
     return False
 
 
@@ -147,50 +142,49 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
     push_node(open_list, root)
     closed_list[(root['loc'], root['timestep'])] = root # Hash node with its corresponding timestamp
     while open_list:
-        cur = pop_node(open_list)
-        if cur['timestep'] >= earliest_goal_timestep and cur['loc'] == goal_loc:
-            return get_path(cur)
+        cur_node = pop_node(open_list)
+        if cur_node['timestep'] >= earliest_goal_timestep and cur_node['loc'] == goal_loc:
+            return get_path(cur_node)
         for direction in range(5):
-            child_loc = move(cur['loc'], direction)
-            child_timestep = cur['timestep'] + 1
-            if is_invalid_move(my_map, child_loc):
+            next_loc = move(cur_node['loc'], direction)
+            next_t = cur_node['timestep'] + 1
+            if is_invalid_move(my_map, next_loc):
                 continue
-            if child_timestep + h_values[child_loc] > latest_goal_timestep: # Unable to reach goal
+            if next_t + h_values[next_loc] > latest_goal_timestep: # Unable to reach goal
                 continue
-            if is_constrained(cur['loc'], child_loc, child_timestep, neg_constraint_table):
+            if is_constrained(cur_node['loc'], next_loc, next_t, neg_constraint_table):
                 continue
-            if child_timestep in pos_constraint_table:
-                num_constraints = pos_constraint_table[child_timestep]
+            if next_t in pos_constraint_table:
                 constraints = [False, False]
-                constraints[0] = (child_loc, child_timestep) in pos_constraint_table
-                constraints[1] = ((cur['loc'], child_loc), child_timestep) in pos_constraint_table
-                if constraints.count(True) != num_constraints:
+                constraints[0] = (next_loc, next_t) in pos_constraint_table
+                constraints[1] = ((cur_node['loc'], next_loc), next_t) in pos_constraint_table
+                if constraints.count(True) != pos_constraint_table[next_t]:
                     continue
-            child = {
-                'loc': child_loc,
-                'g_val': cur['g_val'] + 1,
-                'h_val': h_values[child_loc],
-                'timestep': child_timestep,
-                'parent': cur
+            new_node = {
+                'loc': next_loc,
+                'g_val': cur_node['g_val'] + 1,
+                'h_val': h_values[next_loc],
+                'timestep': next_t,
+                'parent': cur_node
             }
-            if (child_loc, child_timestep) in closed_list and child_timestep:
-                existing_node = closed_list[(child_loc, child_timestep)]
-                if compare_nodes(child, existing_node):
-                    closed_list[(child_loc, child_timestep)] = child
-                    push_node(open_list, child)
+            if (next_loc, next_t) in closed_list and next_t:
+                existing_node = closed_list[(next_loc, next_t)]
+                if compare_nodes(new_node, existing_node):
+                    closed_list[(next_loc, next_t)] = new_node
+                    push_node(open_list, new_node)
             else:
-                closed_list[(child_loc, child_timestep)] = child
-                push_node(open_list, child)
+                closed_list[(next_loc, next_t)] = new_node
+                push_node(open_list, new_node)
 
     return None  # Failed to find solutions
 
 
 def increased_cost_tree_search(my_map, max_cost, cost_offset, start_h_values, goal_h_values):
     ict = set()
-    viable_locations = [(v, h) for v, h in start_h_values.items() if h + goal_h_values[v] < max_cost]
+    valid_loc = [(v, h) for v, h in start_h_values.items() if h + goal_h_values[v] < max_cost]
     for t in range(max_cost):
-        cur_locations = [v for v, h in viable_locations if h <= t]
-        for v in cur_locations:
+        cur_loc = [v for v, h in valid_loc if h <= t]
+        for v in cur_loc:
             for direction in range(5):
                 next_v = move(v, direction)
                 next_t = t + 1
