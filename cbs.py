@@ -57,24 +57,35 @@ def standard_splitting(collision):
     return result
 
 
-def disjoint_splitting(collision):
+def disjoint_splitting(collision, mdds):
     """
-    Disjoint splitting splits at a 50/50 probability. Is it worth it to tailor the probability
-    based on the number of conflicts an agent has relative to the other agent?
-
-    Which agent should be given more probabilities? The one with more 
-    cardinal/semi-cardinal/dependency conflicts? Or the one with fewer conflicts?
-    
-    Which type of conflict should increase/decrease the probabilities?
-
-    Is it worth doing this at all?
+    Weighted probabilities for choosing positive constraints between two agents.
+    The agents' weight is in relation to the number of different paths the other agent has at that
+    timestep. For example, if a1 has 2 different paths and a2 has 1 path at timestep t, then
+    a1 has a 1/3 chance of being chosen, while a2 has a 2/3 chance of being chosen. Special case
+    when either agent has no path in their MDD at timestep t, then all the weight falls onto the
+    other agent.
     """
     result = standard_splitting(collision)
-    rand_agent = random.randint(0, 1)
+    a1_weight = len([e for t, e in mdds[result[0]['agent']] if t == result[0]['timestep']])
+    a2_weight = len([e for t, e in mdds[result[1]['agent']] if t == result[0]['timestep']])
+    cum_weights = [a2_weight, a1_weight + a2_weight]
+    if not a1_weight or not a2_weight: # Special case, if either are zero
+        cum_weights = [a1_weight, a1_weight + a2_weight]
+    population = [[result[0]['agent'], result[0]['loc']], [result[1]['agent'], result[1]['loc']]]
+    chosen_agent = random.choices(population=population,cum_weights=cum_weights)[0]
     for i, predicate in zip([0, 1], [True, False]):
-        result[i]['agent'] = result[rand_agent]['agent']
-        result[i]['loc'] = result[rand_agent]['loc']
+        result[i]['agent'] = chosen_agent[0]
+        result[i]['loc'] = chosen_agent[1]
         result[i]['positive'] = predicate
+    
+    # Even probabilities
+    # result = standard_splitting(collision)
+    # rand_agent = random.randint(0, 1)
+    # for i, predicate in zip([0, 1], [True, False]):
+    #     result[i]['agent'] = result[rand_agent]['agent']
+    #     result[i]['loc'] = result[rand_agent]['loc']
+    #     result[i]['positive'] = predicate
     return result
 
 
@@ -487,22 +498,20 @@ class CBSSolver(object):
 
     def push_node(self, node):
         # TODO: Tie breaking method, num of collisions?
-        h_value = 0
+        g_value = node['cost']
+        h_value = node['h_value']
+        tie_break = len(node['collisions'])
         if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
-            g_value = node['cost']
-            h_value = node['h_value']
-            heapq.heappush(self.open_list, (g_value + h_value, h_value, self.num_of_generated, node))
+            heapq.heappush(self.open_list, (g_value + h_value, h_value, tie_break, self.num_of_generated, node))
         else:
-            g_value = node['cost']
-            # h_value = len(node['collisions'])
-            heapq.heappush(self.open_list, (g_value, h_value, self.num_of_generated, node))
+            heapq.heappush(self.open_list, (g_value, h_value, tie_break, self.num_of_generated, node))
         # if self.stats:
         #     print('push - ', 'sum:', g_value + h_value, ' h-value:', h_value)
         # print("Generate node {}".format(self.num_of_generated))
         self.num_of_generated += 1
 
     def pop_node(self):
-        _, _, id, node = heapq.heappop(self.open_list)
+        _, _, _, id, node = heapq.heappop(self.open_list)
         # g, h, id, node = heapq.heappop(self.open_list)
         # if self.stats:
         #     print(' pop - ', 'sum:', g, ' h-value:', h)
@@ -716,18 +725,17 @@ class CBSSolver(object):
 
         mdds = [None] * self.num_of_agents
 
-        root_h_value = 0
-        if cg_heuristics or dg_heuristics or wdg_heuristics:
-            # get MDDs for each agent given their constraints
-            mdd_start = timer.time()
-            for i in range(self.num_of_agents):
-                agent_i_constraints = [c for c in root['constraints'] if c['agent'] == i]
-                mdds[i] = self.mdd(root['paths'][i], agent_i_constraints)
-                self.mdd_cache[(i, hash(frozenset(agent_i_constraints)))] = mdds[i]
-            root['mdds'] = mdds.copy()
-            self.mdd_time += timer.time() - mdd_start
+        # get MDDs for each agent given their constraints
+        mdd_start = timer.time()
+        for i in range(self.num_of_agents):
+            agent_i_constraints = [c for c in root['constraints'] if c['agent'] == i]
+            mdds[i] = self.mdd(root['paths'][i], agent_i_constraints)
+            self.mdd_cache[(i, hash(frozenset(agent_i_constraints)))] = mdds[i]
+        root['mdds'] = mdds.copy()
+        self.mdd_time += timer.time() - mdd_start
 
         heuristics_start = timer.time()
+        root_h_value = 0
         if cg_heuristics:
             root_h_value = max(root_h_value, self.cg_heuristic(mdds, root['paths'], root['collisions']))
         # TODO: FIX PARAMETERS
@@ -735,8 +743,6 @@ class CBSSolver(object):
             root_h_value = max(root_h_value, dg_heuristic(mdds, root['paths'], root['constraints']))
         if wdg_heuristics:
             root_h_value = max(root_h_value, wdg_heuristic(root['paths'], root['collisions'], root['constraints'], self.my_map, self.goal_heuristics))
-        if not (cg_heuristics or dg_heuristics or wdg_heuristics):
-            h_value = len(root['collisions'])
         root['h_value'] = root_h_value
         self.h_time += timer.time() - heuristics_start
 
@@ -750,7 +756,7 @@ class CBSSolver(object):
                 return cur_node['paths']
             # TODO: Implement ICBS
             collision = cur_node['collisions'][0]
-            constraints = disjoint_splitting(collision) if disjoint else standard_splitting(collision)
+            constraints = disjoint_splitting(collision, cur_node['mdds']) if disjoint else standard_splitting(collision)
             for constraint in constraints:
                 new_node = {
                     'cost': 0,
@@ -796,35 +802,34 @@ class CBSSolver(object):
                 new_node['collisions'] = detect_collisions(new_node['paths'])
                 new_node['cost'] = get_sum_of_cost(new_node['paths'])
 
-                h_value = 0
-                if cg_heuristics or dg_heuristics or wdg_heuristics:
-                    # Cache the MDDs
-                    mdd_start = timer.time()
-                    for i in range(self.num_of_agents):
-                        mdd_cache_timer = timer.time()
-                        hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i]))
-                        agent_hash_pair = (i, hash_value)
-                        if agent_hash_pair in self.mdd_cache:
-                            mdds[i] = self.mdd_cache[agent_hash_pair]
-                            self.mdd_cache.move_to_end(agent_hash_pair)
-                            self.mdd_cache_hit += 1
-                            self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
-                        else:
-                            agent_i_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
-                            mdds[i] = self.mdd(new_node['paths'][i], agent_i_constraints)
-                            mdd_size = getsizeof(mdds[i])
+                # Cache the MDDs
+                mdd_start = timer.time()
+                for i in range(self.num_of_agents):
+                    mdd_cache_timer = timer.time()
+                    hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i]))
+                    agent_hash_pair = (i, hash_value)
+                    if agent_hash_pair in self.mdd_cache:
+                        mdds[i] = self.mdd_cache[agent_hash_pair]
+                        self.mdd_cache.move_to_end(agent_hash_pair)
+                        self.mdd_cache_hit += 1
+                        self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
+                    else:
+                        agent_i_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
+                        mdds[i] = self.mdd(new_node['paths'][i], agent_i_constraints)
+                        mdd_size = getsizeof(mdds[i])
+                        mdd_cache_size = getsizeof(self.mdd_cache)
+                        while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
+                            self.mdd_evict_counter += 1
+                            self.mdd_cache.popitem()
                             mdd_cache_size = getsizeof(self.mdd_cache)
-                            while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
-                                self.mdd_evict_counter += 1
-                                self.mdd_cache.popitem()
-                                mdd_cache_size = getsizeof(self.mdd_cache)
-                            self.mdd_cache[agent_hash_pair] = mdds[i]
-                            self.mdd_cache_miss += 1
-                            self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
-                    new_node['mdds'] = mdds.copy()
-                    self.mdd_time += timer.time() - mdd_start
+                        self.mdd_cache[agent_hash_pair] = mdds[i]
+                        self.mdd_cache_miss += 1
+                        self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
+                new_node['mdds'] = mdds.copy()
+                self.mdd_time += timer.time() - mdd_start
 
                 heuristics_start = timer.time()
+                h_value = 0
                 if cg_heuristics:
                     h_value = max(h_value, self.cg_heuristic(mdds, new_node['paths'], new_node['collisions']))
                 # TODO: Pass mdds 
@@ -833,8 +838,6 @@ class CBSSolver(object):
                     h_value = max(h_value, dg_heuristic(mdds, new_node['paths'], new_node['constraints']))
                 if wdg_heuristics:
                     h_value = max(h_value, wdg_heuristic(new_node['paths'], new_node['collisions'], new_node['constraints'], self.my_map, self.goal_heuristics))
-                if not (cg_heuristics or dg_heuristics or wdg_heuristics):
-                    h_value = len(new_node['collisions'])
                 new_node['h_value'] = h_value
                 self.h_time += timer.time() - heuristics_start
 
@@ -847,42 +850,41 @@ class CBSSolver(object):
         # print("\n Found a solution! \n")
         print()
         self.CPU_time = timer.time() - self.start_time
+        overhead = self.mdd_time + self.h_time
+        search_time = self.CPU_time - overhead
         paths = node['paths']
         print(f'CPU time (s):       {self.CPU_time:.2f}')
-        if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
-            overhead = self.mdd_time + self.h_time
-            search_time = self.CPU_time - overhead
-            print(f'Search time:        {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
-            print(f'Overhead time:      {overhead:.2f} ({overhead / self.CPU_time * 100:05.2f}%)')
-            print(f'Overhead ratio:     {overhead / search_time:.2f}:1')
-            print(f'Heuristics cache:   {getsizeof(self.h_cache)} (bytes)')
-            print(f'Heuristics time:    {self.h_time:.2f}')
-            print(f' - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
-            print(f' - Hit time:        {self.h_cache_hit_time:.2f} ({self.h_cache_hit_time / self.h_time * 100:05.2f}%)')
-            print(f' - Miss time:       {self.h_cache_miss_time:.2f} ({self.h_cache_miss_time / self.h_time * 100:05.2f}%)')
-            print(f' - Hit/miss ratio:  {self.h_cache_hit}:{self.h_cache_miss}')
-            print(f' - Evicted #:       {self.h_cache_evict_counter}')
-            print(f'MDD cache:          {getsizeof(self.mdd_cache)} (bytes)')
-            print(f'MDD time:           {self.mdd_time:.2f}')
-            print(f' - Hit time:        {self.mdd_cache_hit_time:.2f} ({self.mdd_cache_hit_time / self.mdd_time * 100:05.2f}%)')
-            print(f' - Miss time:       {self.mdd_cache_miss_time:.2f} ({self.mdd_cache_miss_time / self.mdd_time * 100:05.2f}%)')
-            print(f'    - Positive time:     {self.mdd_pos_constraint_time:.2f}')
-            print(f'    - Dijkstra cache:    {getsizeof(self.low_lv_h_cache)} (bytes)')
-            print(f'    - Dijkstra time:     {self.low_lv_h_time:.2f}')
-            print(f'       - Hit time:       {self.low_lv_h_cache_hit_time:.2f}')
-            print(f'       - Miss time:      {self.low_lv_h_cache_miss_time:.2f}')            
-            print(f'       - Hit/miss ratio: {self.low_lv_h_cache_hit}:{self.low_lv_h_cache_miss}')
-            print(f'       - Evicted #:      {self.low_lv_h_cache_evict_counter}')
-            print(f'    - Partial MDD cache: {getsizeof(self.partial_mdd_cache)} (bytes)')
-            print(f'    - Partial MDD time:  {self.partial_mdd_time:.2f}')
-            print(f'       - Hit time:       {self.partial_mdd_hit_time:.2f}')
-            print(f'       - Miss time:      {self.partial_mdd_miss_time:.2f}')            
-            print(f'       - Hit/miss ratio: {self.partial_mdd_hit}:{self.partial_mdd_miss}')
-            print(f'       - Evicted #:      {self.partial_mdd_evict_counter}')
-            print(f'    - Negative time:     {self.mdd_neg_constraint_time:.2f}')
-            print(f'    - Clean up:          {self.mdd_clean_up_time:.2f}')
-            print(f' - Hit/miss ratio:  {self.mdd_cache_hit}:{self.mdd_cache_miss}')
-            print(f' - Evicted #:       {self.mdd_evict_counter}')
+        print(f'Search time:        {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
+        print(f'Overhead time:      {overhead:.2f} ({overhead / self.CPU_time * 100:05.2f}%)')
+        print(f'Overhead ratio:     {overhead / search_time:.2f}:1')
+        print(f'Heuristics cache:   {getsizeof(self.h_cache)} (bytes)')
+        print(f'Heuristics time:    {self.h_time:.2f}')
+        print(f' - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
+        print(f' - Hit time:        {self.h_cache_hit_time:.2f} ({self.h_cache_hit_time / self.h_time * 100:05.2f}%)')
+        print(f' - Miss time:       {self.h_cache_miss_time:.2f} ({self.h_cache_miss_time / self.h_time * 100:05.2f}%)')
+        print(f' - Hit/miss ratio:  {self.h_cache_hit}:{self.h_cache_miss}')
+        print(f' - Evicted #:       {self.h_cache_evict_counter}')
+        print(f'MDD cache:          {getsizeof(self.mdd_cache)} (bytes)')
+        print(f'MDD time:           {self.mdd_time:.2f}')
+        print(f' - Hit time:        {self.mdd_cache_hit_time:.2f} ({self.mdd_cache_hit_time / self.mdd_time * 100:05.2f}%)')
+        print(f' - Miss time:       {self.mdd_cache_miss_time:.2f} ({self.mdd_cache_miss_time / self.mdd_time * 100:05.2f}%)')
+        print(f'    - Positive time:     {self.mdd_pos_constraint_time:.2f}')
+        print(f'    - Dijkstra cache:    {getsizeof(self.low_lv_h_cache)} (bytes)')
+        print(f'    - Dijkstra time:     {self.low_lv_h_time:.2f}')
+        print(f'       - Hit time:       {self.low_lv_h_cache_hit_time:.2f}')
+        print(f'       - Miss time:      {self.low_lv_h_cache_miss_time:.2f}')            
+        print(f'       - Hit/miss ratio: {self.low_lv_h_cache_hit}:{self.low_lv_h_cache_miss}')
+        print(f'       - Evicted #:      {self.low_lv_h_cache_evict_counter}')
+        print(f'    - Partial MDD cache: {getsizeof(self.partial_mdd_cache)} (bytes)')
+        print(f'    - Partial MDD time:  {self.partial_mdd_time:.2f}')
+        print(f'       - Hit time:       {self.partial_mdd_hit_time:.2f}')
+        print(f'       - Miss time:      {self.partial_mdd_miss_time:.2f}')            
+        print(f'       - Hit/miss ratio: {self.partial_mdd_hit}:{self.partial_mdd_miss}')
+        print(f'       - Evicted #:      {self.partial_mdd_evict_counter}')
+        print(f'    - Negative time:     {self.mdd_neg_constraint_time:.2f}')
+        print(f'    - Clean up:          {self.mdd_clean_up_time:.2f}')
+        print(f' - Hit/miss ratio:  {self.mdd_cache_hit}:{self.mdd_cache_miss}')
+        print(f' - Evicted #:       {self.mdd_evict_counter}')
         print(f'Sum of costs:       {get_sum_of_cost(paths)}')
         print(f'Expanded nodes:     {self.num_of_expanded}')
         print(f'Generated nodes:    {self.num_of_generated}')
