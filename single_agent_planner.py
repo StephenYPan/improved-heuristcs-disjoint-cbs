@@ -157,8 +157,8 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
             if is_constrained(cur['loc'], child_loc, child_timestep, neg_constraint_table):
                 continue
             if child_timestep in pos_constraint_table \
-                and not ((child_loc, child_timestep) in pos_constraint_table \
-                or ((cur['loc'], child_loc), child_timestep) in pos_constraint_table):
+                and not (((cur['loc'], child_loc), child_timestep) in pos_constraint_table \
+                or (child_loc, child_timestep) in pos_constraint_table):
                 continue
             child = {
                 'loc': child_loc,
