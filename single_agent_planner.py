@@ -162,12 +162,9 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
             if child_timestep in pos_constraint_table:
                 num_constraints = pos_constraint_table[child_timestep]
                 constraints = [False, False]
-                if (child_loc, child_timestep) in pos_constraint_table:
-                    constraints[0] = True
-                if ((cur['loc'], child_loc), child_timestep) in pos_constraint_table:
-                    constraints[1] = True
-                number = constraints.count(True)
-                if number != num_constraints:
+                constraints[0] = (child_loc, child_timestep) in pos_constraint_table
+                constraints[1] = ((cur['loc'], child_loc), child_timestep) in pos_constraint_table
+                if constraints.count(True) != num_constraints:
                     continue
             child = {
                 'loc': child_loc,
