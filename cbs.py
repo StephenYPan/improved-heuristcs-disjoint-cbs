@@ -788,9 +788,8 @@ class CBSSolver(object):
                 skip = False
                 if constraint['positive']:
                     agent_ids = paths_violate_constraint(constraint, new_node['paths'])
+                    loc = constraint['loc'] if len(constraint['loc']) == 1 else [constraint['loc'][1], constraint['loc'][0]]
                     for i in agent_ids:
-                        loc = constraint['loc'] if len(constraint['loc']) == 1 \
-                            else [constraint['loc'][1], constraint['loc'][0]]
                         new_node['constraints'].append({
                             'agent': i,
                             'loc': loc,
@@ -798,8 +797,7 @@ class CBSSolver(object):
                             'status': constraint['status'],
                             'positive': False
                         })
-                        path_i = a_star(self.my_map, self.starts[i], self.goals[i],
-                                        self.goal_heuristics[i], i, new_node['constraints'])
+                        path_i = a_star(self.my_map, self.starts[i], self.goals[i], self.goal_heuristics[i], i, new_node['constraints'])
                         if not path_i:
                             skip = True
                             break
