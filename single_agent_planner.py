@@ -97,7 +97,8 @@ def build_constraint_table(constraints, agent):
         loc = constraint['loc'][0] if len(constraint['loc']) == 1 else tuple(constraint['loc'])
         timestep = constraint['timestep']
         if constraint['positive']:
-            pos_constraint_table[timestep] = loc
+            pos_constraint_table[timestep] = 0
+            pos_constraint_table[(loc, timestep)] = loc
             continue
         if constraint['status'] == 'finished': # To satisfy prioritized planning
             neg_constraint_table[loc[0]] = timestep
@@ -117,11 +118,6 @@ def is_constrained(cur_loc, next_loc, next_time, constraint_table):
     if (next_loc) in constraint_table:
         return next_time >= constraint_table[next_loc]
     return False
-
-
-def is_pos_constraint(cur_loc, next_loc, next_time, pos_constraint_table):
-    pos_constraint_loc = pos_constraint_table[next_time]
-    return next_loc == pos_constraint_loc or (cur_loc, next_loc) == pos_constraint_loc
 
 
 def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
@@ -161,7 +157,8 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
             if is_constrained(cur['loc'], child_loc, child_timestep, neg_constraint_table):
                 continue
             if child_timestep in pos_constraint_table \
-                and not is_pos_constraint(cur['loc'], child_loc, child_timestep, pos_constraint_table):
+                and not ((child_loc, child_timestep) in pos_constraint_table \
+                or ((cur['loc'], child_loc), child_timestep) in pos_constraint_table):
                 continue
             child = {
                 'loc': child_loc,
