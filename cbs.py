@@ -62,7 +62,7 @@ def disjoint_splitting(collision, mdds):
     Weighted probabilities for choosing positive constraints between two agents. The agents' weight
     is in relation to the number of different paths the other agent has at that timestep. For 
     example, if a1 has 5 different paths and a2 has 2 path at timestep t, then a1 has a 2/7 chance 
-    of being chosen, while a2 has a 5/7 chance of being chosen. 
+    of being chosen and a2 has a 5/7 chance of being chosen. 
     
     Special case when one agent has no path in their MDD at timestep t, then all the weight falls
     onto the other agent.
