@@ -215,44 +215,28 @@ def find_cardinal_conflict(mdds, min_timestep):
     return False
 
 
-def cg_heuristic(reduced_mdds, paths, collisions):
-    """
-    Constructs an adjacency matrix of cardinal conflicting agents and calculates the min vertex cover
-    """
-    V = len(paths)
-    E = 0
-    adj_matrix = [[0] * V for i in range(V)]
-    for c in collisions:
-        a1 = c['a1']
-        a2 = c['a2']
-        min_timestep = min(len(paths[a1]), len(paths[a2]))
-        conflict_mdds = [reduced_mdds[a1], reduced_mdds[a2]]
-
-        if not find_cardinal_conflict(conflict_mdds, min_timestep):
-            continue
-        adj_matrix[a1][a2] = 1
-        adj_matrix[a2][a1] = 1
-        E += 1
-    if E == 1: # Has to be 1 vertex
-        return 1
-    min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
-    return min_vertex_cover_value
-
-
-def joint_dependency_diagram(mdds, agents, min_timestep):
+def test_dependency(mdds, agents, paths, min_timestep):
     """
     Merge two MDDs and return a decision tree.
-    return joint mdd and boolean. If dependent true, otherwise false.
+    return boolean. If dependent true, otherwise false.
     """
     
+    # joint_mdd = set()
+    # agent1_start_loc = [e for t,e in mdds[0] if t==1][0][0]
+    # agent2_start_loc = [e for t,e in mdds[1] if t==1][0][0]
+    # joint_mdd.add((0, agent1_start_loc, agent2_start_loc))
+    # agent1_vertex = set()
+    # agent2_vertex = set()
+    # agent1_vertex.add(agent1_start_loc)
+    # agent2_vertex.add(agent2_start_loc)
+   
+
     joint_mdd = set()
-    agent1_start_loc = [e for t,e in mdds[0] if t==0][0]
-    agent2_start_loc = [e for t,e in mdds[1] if t==0][0]
-    joint_mdd.add((0, agent1_start_loc, agent2_start_loc))
+    joint_mdd.add((0, paths[0][0], paths[1][0]))
     agent1_vertex = set()
     agent2_vertex = set()
-    agent1_vertex.add(agent1_start_loc)
-    agent2_vertex.add(agent2_start_loc)
+    agent1_vertex.add(paths[0][0])
+    agent2_vertex.add(paths[1][0])
     for i in range(1, min_timestep):
         agent1_edge = set([e for t, e in mdds[0] if (t == i) and e[0] in agent1_vertex])
         agent2_edge = set([e for t, e in mdds[1] if (t == i) and e[0] in agent2_vertex])
@@ -271,44 +255,11 @@ def joint_dependency_diagram(mdds, agents, min_timestep):
                 agent2_vertex.add(e2[1])
         
         if num_edge == 0:
-            return joint_mdd, True
+            return True
 
     
-    return joint_mdd, False
+    return False
 
-
-def dg_heuristic(mdds, paths, constraints):
-    """
-    Constructs a adjacency matrix and returns the minimum vertex cover
-    
-    python3 run_experiments.py --instance custominstances/exp2.txt --solver CBS --batch --disjoint --dg
-    """
-    V = len(mdds)
-    E = 0
-    adj_matrix = [[0] * V for i in range(V)]
-    for a1 in range(0,V-1):
-        for a2 in range(a1+1,V):
-            # mdd_pair = [set([(t,e) for t,e in reduced_mdds[agent] if len(e) != 0]) for agent in [a1,a2]]
-            mdd_pair = [mdds[a1], mdds[a2]]
-            agent_pair = [a1,a2]
-            path_pair = [paths[a1], paths[a2]]
-            min_timestep = min(len(path_pair[0]), len(path_pair[1]))
-        
-            # a1_timestep = max(mdd_pair[0], key=lambda n : n[0])[0]
-            # a2_timestep = max(mdd_pair[1], key=lambda n : n[0])[0]
-            # min_timestep = min(a1_timestep, a2_timestep)
-            joint_mdd, dependence = joint_dependency_diagram(mdd_pair, agent_pair, min_timestep)
-            adj_matrix[a1][a2] = dependence
-            adj_matrix[a2][a1] = dependence
-            E+= dependence
-    
-    # E = sum(sum(adj_matrix,[]))/2
-    if E==1:
-        return 1
-    min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
-    return min_vertex_cover_value
-
-    
 
 def wdg_heuristic(cur_paths, collisions, constraints, my_map, heuristics):
     """
@@ -674,6 +625,59 @@ class CBSSolver(object):
         self.ewmvc_mvc_time += timer.time() - mvc_timer
         return min_vertex_cover_value
 
+    def dg_heuristic(self, mdds, paths, constraints):
+        """
+        Constructs a adjacency matrix and returns the minimum vertex cover
+        
+        python3 run_experiments.py --instance custominstances/exp2.txt --solver CBS --batch --disjoint --dg
+        """
+        V = len(mdds)
+        E = 0
+        adj_matrix = [[0] * V for i in range(V)]
+        is_dependent = False
+        for a1 in range(0,V-1):
+            for a2 in range(a1+1,V):
+                h_start = timer.time()
+                hash_value = hash(frozenset(mdds[a2])) ^ hash(frozenset(mdds[a1]))
+                agent_hash_pair = (a1, a2, hash_value)
+
+                if agent_hash_pair in self.h_cache:
+                    is_dependent = self.h_cache[agent_hash_pair]
+                    self.h_cache.move_to_end(agent_hash_pair)
+                    self.h_cache_hit += 1
+                    self.h_cache_hit_time += timer.time() - h_start
+                else:
+                    mdd_pair = [mdds[a1], mdds[a2]]
+                    agent_pair = [a1,a2]
+                    path_pair = [paths[a1], paths[a2]]
+                    min_timestep = min(len(path_pair[0]), len(path_pair[1]))
+                    is_dependent = test_dependency(mdd_pair, agent_pair, path_pair, min_timestep)
+
+                    bool_size = getsizeof(is_dependent)
+                    h_cache_size = getsizeof(self.h_cache)
+                    while h_cache_size + bool_size > self.h_cache_max_size and len(self.h_cache) != 0:
+                        self.h_cache_evict_counter += 1
+                        self.h_cache.popitem()
+                        h_cache_size = getsizeof(self.h_cache)
+                    self.h_cache[agent_hash_pair] = is_dependent
+                    self.h_cache_miss += 1
+                    self.h_cache_miss_time += timer.time() - h_start
+
+                adj_matrix[a1][a2] = is_dependent
+                adj_matrix[a2][a1] = is_dependent
+                E+= is_dependent
+        
+        # E = sum(sum(adj_matrix,[]))/2
+        if E==1:
+            return 1
+        
+        mvc_timer = timer.time()
+        min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
+        self.ewmvc_mvc_time += timer.time() - mvc_timer
+        return min_vertex_cover_value
+
+    
+
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
         """ Finds paths for all agents from their start locations to their goal locations
 
@@ -725,7 +729,7 @@ class CBSSolver(object):
             root_h_value = max(root_h_value, self.cg_heuristic(mdds, root['paths'], root['collisions']))
         # TODO: FIX PARAMETERS
         if dg_heuristics:
-            root_h_value = max(root_h_value, dg_heuristic(mdds, root['paths'], root['constraints']))
+            root_h_value = max(root_h_value, self.dg_heuristic(mdds, root['paths'], root['constraints']))
         if wdg_heuristics:
             root_h_value = max(root_h_value, wdg_heuristic(root['paths'], root['collisions'], root['constraints'], self.my_map, self.goal_heuristics))
         root['h_value'] = root_h_value
@@ -818,7 +822,7 @@ class CBSSolver(object):
                 # TODO: Pass mdds 
                 # TODO: FIX PARAMETERS
                 if dg_heuristics:
-                    h_value = max(h_value, dg_heuristic(mdds, new_node['paths'], new_node['constraints']))
+                    h_value = max(h_value, self.dg_heuristic(mdds, new_node['paths'], new_node['constraints']))
                 if wdg_heuristics:
                     h_value = max(h_value, wdg_heuristic(new_node['paths'], new_node['collisions'], new_node['constraints'], self.my_map, self.goal_heuristics))
                 new_node['h_value'] = h_value
