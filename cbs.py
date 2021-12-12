@@ -215,7 +215,11 @@ def find_cardinal_conflict(mdds, min_timestep):
     return False
 
 
+<<<<<<< HEAD
 def test_dependency(mdds, agents, paths, min_timestep):
+=======
+def joint_dependency_diagram(mdds, agents, min_timestep):
+>>>>>>> d90a6f7bdb968ce9f332bea85fb98cef39ded868
     """
     Merge two MDDs and return a decision tree.
     return boolean. If dependent true, otherwise false.
@@ -479,6 +483,7 @@ class CBSSolver(object):
         negative constraints.
         """
         mdd = set()
+        mdd.add((0, path[0])) # TODO: Remove
         min_timestep = len(path)
         # Positive Constraints
         pos_constraint_timer = timer.time()
@@ -486,8 +491,7 @@ class CBSSolver(object):
         pos_vertex = set()
         for timestep, loc in pos_constraints:
             if len(loc) == 1:
-                loc = loc[0]
-                pos_vertex.add((timestep, loc))
+                pos_vertex.add((timestep, loc[0]))
             else:
                 loc = tuple(loc)
                 pos_vertex.add((timestep - 1, loc[0]))
@@ -545,7 +549,7 @@ class CBSSolver(object):
             mdd = mdd | partial_mdd # Set union
             self.partial_mdd_time += timer.time() - partial_mdd_timer
         for i, e in enumerate(zip(path, path[1:])):
-            assert ((i + 1, e) in mdd) is True, 'path and mdd don\'t match'
+            assert ((i + 1, e) in mdd) is True, 'mdd does not contain path edges'
         # Negative Constraints
         neg_constraint_timer = timer.time()
         neg_constraints = [(c['timestep'], c['loc']) for c in constraints if c['positive'] == False and c['timestep'] < min_timestep]
@@ -613,11 +617,9 @@ class CBSSolver(object):
                 self.h_cache[agent_hash_pair] = is_cardinal_conflict
                 self.h_cache_miss += 1
                 self.h_cache_miss_time += timer.time() - h_start
-            if not is_cardinal_conflict:
-                continue
-            adj_matrix[a1][a2] = 1
-            adj_matrix[a2][a1] = 1
-            E += 1
+            adj_matrix[a1][a2] = is_cardinal_conflict
+            adj_matrix[a2][a1] = is_cardinal_conflict
+            E += is_cardinal_conflict
         if E == 1: # Has to be 1 vertex
             return 1
         mvc_timer = timer.time()

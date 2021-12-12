@@ -1,6 +1,5 @@
 /__pycache__
 /instances
-/subsetinstances
 min_vertex_cover.py
 results.csv
 output.txt
