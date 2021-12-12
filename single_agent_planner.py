@@ -191,7 +191,7 @@ def increased_cost_tree_search(my_map, max_cost, cost_offset, start_h_values, go
                 if is_invalid_move(my_map, next_v):
                     continue
                 # Check if the next vertex can reach the goal
-                if next_t + goal_h_values[(next_v)] >= max_cost:
+                if next_t + goal_h_values[next_v] >= max_cost:
                     continue
                 ict.add((next_t + cost_offset, (v, next_v)))
     return ict
