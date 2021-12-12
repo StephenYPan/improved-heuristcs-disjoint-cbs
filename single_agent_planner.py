@@ -180,6 +180,12 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
 
 
 def increased_cost_tree_search(my_map, max_cost, cost_offset, start_h_values, goal_h_values):
+    """
+    If ICTS is converted to BFS/DFS then MDD calculations become impossible in maps larger than 8x8.
+    The benefit of using BFS/DFS is the ability to construct a MDD such that it satisfies the 
+    constraints at the cost of adding duplicate edges to ICTS. The number of duplicates edges
+    increases to a point where computation time takes too long.
+    """
     ict = set()
     valid_loc = [(v, h) for v, h in start_h_values.items() if h + goal_h_values[v] < max_cost]
     for t in range(max_cost):
