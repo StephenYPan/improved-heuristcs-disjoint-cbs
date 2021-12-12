@@ -215,30 +215,6 @@ def find_cardinal_conflict(mdds, min_timestep):
     return False
 
 
-def cg_heuristic(reduced_mdds, paths, collisions):
-    """
-    Constructs an adjacency matrix of cardinal conflicting agents and calculates the min vertex cover
-    """
-    V = len(paths)
-    E = 0
-    adj_matrix = [[0] * V for i in range(V)]
-    for c in collisions:
-        a1 = c['a1']
-        a2 = c['a2']
-        min_timestep = min(len(paths[a1]), len(paths[a2]))
-        conflict_mdds = [reduced_mdds[a1], reduced_mdds[a2]]
-
-        if not find_cardinal_conflict(conflict_mdds, min_timestep):
-            continue
-        adj_matrix[a1][a2] = 1
-        adj_matrix[a2][a1] = 1
-        E += 1
-    if E == 1: # Has to be 1 vertex
-        return 1
-    min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
-    return min_vertex_cover_value
-
-
 def joint_dependency_diagram(mdds, agents, min_timestep):
     """
     Merge two MDDs and return a decision tree.
