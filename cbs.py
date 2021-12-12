@@ -504,7 +504,7 @@ class CBSSolver(object):
         negative constraints.
         """
         mdd = set()
-        mdd.add((0, path[0]))
+        mdd.add((0, path[0])) # TODO: Remove
         min_timestep = len(path)
         # Positive Constraints
         pos_constraint_timer = timer.time()
@@ -512,8 +512,7 @@ class CBSSolver(object):
         pos_vertex = set()
         for timestep, loc in pos_constraints:
             if len(loc) == 1:
-                loc = loc[0]
-                pos_vertex.add((timestep, loc))
+                pos_vertex.add((timestep, loc[0]))
             else:
                 loc = tuple(loc)
                 pos_vertex.add((timestep - 1, loc[0]))
