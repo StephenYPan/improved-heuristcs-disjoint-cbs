@@ -228,7 +228,7 @@ def cg_heuristic(reduced_mdds, paths, collisions):
         min_timestep = min(len(paths[a1]), len(paths[a2]))
         conflict_mdds = [reduced_mdds[a1], reduced_mdds[a2]]
 
-        if not cardinal_conflict(conflict_mdds, min_timestep):
+        if not find_cardinal_conflict(conflict_mdds, min_timestep):
             continue
         adj_matrix[a1][a2] = 1
         adj_matrix[a2][a1] = 1
