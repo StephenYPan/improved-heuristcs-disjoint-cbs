@@ -570,7 +570,7 @@ class CBSSolver(object):
             mdd = mdd | partial_mdd # Set union
             self.partial_mdd_time += timer.time() - partial_mdd_timer
         for i, e in enumerate(zip(path, path[1:])):
-            assert ((i + 1, e) in mdd) is True, 'path and mdd don\'t match'
+            assert ((i + 1, e) in mdd) is True, 'mdd does not contain path edges'
         # Negative Constraints
         neg_constraint_timer = timer.time()
         neg_constraints = [(c['timestep'], c['loc']) for c in constraints if c['positive'] == False and c['timestep'] < min_timestep]
