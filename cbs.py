@@ -504,6 +504,7 @@ class CBSSolver(object):
         negative constraints.
         """
         mdd = set()
+        mdd.add((0, path[0]))
         min_timestep = len(path)
         # Positive Constraints
         pos_constraint_timer = timer.time()
@@ -638,11 +639,9 @@ class CBSSolver(object):
                 self.h_cache[agent_hash_pair] = is_cardinal_conflict
                 self.h_cache_miss += 1
                 self.h_cache_miss_time += timer.time() - h_start
-            if not is_cardinal_conflict:
-                continue
-            adj_matrix[a1][a2] = 1
-            adj_matrix[a2][a1] = 1
-            E += 1
+            adj_matrix[a1][a2] = is_cardinal_conflict
+            adj_matrix[a2][a1] = is_cardinal_conflict
+            E += is_cardinal_conflict
         if E == 1: # Has to be 1 vertex
             return 1
         mvc_timer = timer.time()
