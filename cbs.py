@@ -215,86 +215,66 @@ def find_cardinal_conflict(mdds, min_timestep):
     return False
 
 
-def joint_dependency_diagram(joint_mdd, mdds, agents, paths, min_timestep, constraints):
+def cg_heuristic(reduced_mdds, paths, collisions):
+    """
+    Constructs an adjacency matrix of cardinal conflicting agents and calculates the min vertex cover
+    """
+    V = len(paths)
+    E = 0
+    adj_matrix = [[0] * V for i in range(V)]
+    for c in collisions:
+        a1 = c['a1']
+        a2 = c['a2']
+        min_timestep = min(len(paths[a1]), len(paths[a2]))
+        conflict_mdds = [reduced_mdds[a1], reduced_mdds[a2]]
+
+        if not cardinal_conflict(conflict_mdds, min_timestep):
+            continue
+        adj_matrix[a1][a2] = 1
+        adj_matrix[a2][a1] = 1
+        E += 1
+    if E == 1: # Has to be 1 vertex
+        return 1
+    min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
+    return min_vertex_cover_value
+
+
+def joint_dependency_diagram(mdds, agents, min_timestep):
     """
     Merge two MDDs and return a decision tree.
     return joint mdd and boolean. If dependent true, otherwise false.
     """
-    # print('agent:',agents[0], '\npath len:', len(paths[0]), '\npath:', paths[0], '\nconstraint:', constraint_list[0])
-    # for i in range(min_timestep):
-    #     print('t:',i,[e for t, e in new_mdds[0] if t == i])
-    # print()
+    
+    joint_mdd = set()
+    agent1_start_loc = [e for t,e in mdds[0] if t==0][0]
+    agent2_start_loc = [e for t,e in mdds[1] if t==0][0]
+    joint_mdd.add((0, agent1_start_loc, agent2_start_loc))
+    agent1_vertex = set()
+    agent2_vertex = set()
+    agent1_vertex.add(agent1_start_loc)
+    agent2_vertex.add(agent2_start_loc)
+    for i in range(1, min_timestep):
+        agent1_edge = set([e for t, e in mdds[0] if (t == i) and e[0] in agent1_vertex])
+        agent2_edge = set([e for t, e in mdds[1] if (t == i) and e[0] in agent2_vertex])
+        agent1_vertex.clear()
+        agent2_vertex.clear()
+        num_edge = 0
+        for e1 in agent1_edge:
+            for e2 in agent2_edge:
+                if (e1[1]==e2[1]) or (e1[0]==e2[0]):
+                    continue
+                if (e1[1]==e2[0]) and (e1[0]==e2[1]):
+                    continue
+                num_edge += 1
+                joint_mdd.add((i, e1, e2))
+                agent1_vertex.add(e1[1])
+                agent2_vertex.add(e2[1])
+        
+        if num_edge == 0:
+            return joint_mdd, True
 
-    # print('agent:',agents[1], '\npath len:', len(paths[1]), '\npath:', paths[1], '\nconstraint:', constraint_list[1])
-    # for i in range(min_timestep):
-    #     print('t:',i,[e for t, e in new_mdds[1] if t == i])
-    # print('\n')
-
-    new_joint_mdd = None
-    # joint_mdd_vertices = OrderedDict()
-    # joint_mdd_edges = OrderedDict()
-
-    # root_vertex = (mdd1[0][1], mdd2[0][1])
-    # joint_mdd_vertices[(0, root_vertex)] = 0
-    # for cost1, (parent1, child1) in mdd1[1:]:
-    #     for cost2, (parent2, child2) in mdd2[1:]:
-    #         if cost1 < cost2:
-    #             break
-    #         if child1 == child2: # Conflict Vertex
-    #             continue
-    #         if (cost1 - 1, (parent1, parent2)) not in joint_mdd_vertices:
-    #             continue
-    #         joint_mdd_vertices[(cost1, (child1, child2))] = cost1
-    #         joint_mdd_edges[(cost1, ((parent1, child1), (parent2, child2)))] = cost1
-
-    # add remaining vertices and edges
-    # remaining_cost = mdd2[-1][0]
-    # for cost, (parent, child) in mdd1:
-    #     if cost <= remaining_cost:
-    #         continue
-    #     joint_mdd_vertices[(cost1, (child1, None))] = cost1
-    #     joint_mdd_edges[(cost1, (parent1, child1))] = cost1
-
-    # edge_list = []
-    # cur_cost = 0
-    # for cost, edge in mdd1:
-    #     if cur_cost == cost:
-    #         edge_list.append(edge)
-    #     else:
-    #         print('cost:', cur_cost, edge_list)
-    #         edge_list = []
-    #         edge_list.append(edge)
-    #         cur_cost = cost
-    # print('cost:', cost, edge_list)
-    # print()
-
-    # edge_list = []
-    # cur_cost = 0
-    # for cost, edge in mdd2:
-    #     if cur_cost == cost:
-    #         edge_list.append(edge)
-    #     else:
-    #         print('cost:', cur_cost, edge_list)
-    #         edge_list = []
-    #         edge_list.append(edge)
-    #         cur_cost = cost
-    # print('cost:', cost, edge_list)
-    # print()
-
-    # print('joint mdds')
-    # edge_list = []
-    # cur_cost = 0
-    # for cost, edge in sorted(joint_mdd_edges):
-    #     if cur_cost == cost:
-    #         edge_list.append(edge)
-    #     else:
-    #         print('cost:', cur_cost, edge_list)
-    #         edge_list = []
-    #         edge_list.append(edge)
-    #         cur_cost = cost
-    # print('cost:', cost, edge_list)
-    # print('\n')
-    return (joint_mdd, False)
+    
+    return joint_mdd, False
 
 
 def dg_heuristic(mdds, paths, constraints):
@@ -305,32 +285,30 @@ def dg_heuristic(mdds, paths, constraints):
     """
     V = len(mdds)
     E = 0
-    joint_mdd = None
-    dependency_list = [False] * V
-    for i, j in zip(range(V), range(V)[1:]):
-        a1 = i
-        a2 = j
-        if len(paths[a1]) > len(paths[a2]):
-            a1, a2 = a2, a1
-        new_mdds = [mdds[a1], mdds[a2]]
-        agent_pair = [a1, a2]
-        new_paths = [paths[a1], paths[a2]]
-        min_timestep = len(paths[a1])
-        # (conflict_mdds, conflict_agents, conflict_paths, min_timestep, constraints)
-        joint_mdd, dependency_list[j] = joint_dependency_diagram(joint_mdd, new_mdds, agent_pair, new_paths, min_timestep, constraints)
-
     adj_matrix = [[0] * V for i in range(V)]
-    # for dependency in dependency_list:
-    #     # TODO: generate dependency graph from a boolean list
-    #     "do stuff"
-    #     adj_matrix[i][j] = 1
-    #     adj_matrix[j][i] = 1
-    #     E += 1
-    if E == 1:
+    for a1 in range(0,V-1):
+        for a2 in range(a1+1,V):
+            # mdd_pair = [set([(t,e) for t,e in reduced_mdds[agent] if len(e) != 0]) for agent in [a1,a2]]
+            mdd_pair = [mdds[a1], mdds[a2]]
+            agent_pair = [a1,a2]
+            path_pair = [paths[a1], paths[a2]]
+            min_timestep = min(len(path_pair[0]), len(path_pair[1]))
+        
+            # a1_timestep = max(mdd_pair[0], key=lambda n : n[0])[0]
+            # a2_timestep = max(mdd_pair[1], key=lambda n : n[0])[0]
+            # min_timestep = min(a1_timestep, a2_timestep)
+            joint_mdd, dependence = joint_dependency_diagram(mdd_pair, agent_pair, min_timestep)
+            adj_matrix[a1][a2] = dependence
+            adj_matrix[a2][a1] = dependence
+            E+= dependence
+    
+    # E = sum(sum(adj_matrix,[]))/2
+    if E==1:
         return 1
     min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
     return min_vertex_cover_value
 
+    
 
 def wdg_heuristic(cur_paths, collisions, constraints, my_map, heuristics):
     """
