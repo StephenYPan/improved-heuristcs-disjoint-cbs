@@ -251,9 +251,9 @@ def find_dependency(mdds, paths):
         dependency_conflict = True
         for e1 in agent1_edge:
             for e2 in agent2_edge:
-                if (e1[1] == e2[1]): # Vertex collision
+                if e1[1] == e2[1]: # Vertex collision
                     continue
-                if (e1[1] == e2[0]) and (e1[0] == e2[1]): # Edge collision
+                if e1[1] == e2[0] and e1[0] == e2[1]: # Edge collision
                     continue
                 dependency_conflict = False
                 agent1_vertex.add((i, e1[1]))
