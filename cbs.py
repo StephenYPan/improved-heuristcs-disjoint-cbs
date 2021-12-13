@@ -235,6 +235,7 @@ def find_cardinal_conflict(mdds, paths):
     max_timestep = max(len(paths[0]), len(paths[1]))
     return find_extended_mdd_conflict(vertex, mdd, min_timestep, max_timestep)
 
+
 def find_dependency(mdds, paths):
     """
     Return true if there exists a dependency conflict, otherwise false.
