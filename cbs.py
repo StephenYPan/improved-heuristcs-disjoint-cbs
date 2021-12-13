@@ -180,13 +180,20 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
-def find_extended_mdd_conflict(extended_vertex, mdd, start, end):
+def find_extended_mdd_conflict(mdds, paths):
     """
     Return true if there exists a cardinal conflict with the extended mdd, otherwise false.
     """
+    start = min(len(paths[0]), len(paths[1]))
+    end = max(len(paths[0]), len(paths[1]))
+    if len(paths[0]) > len(paths[1]):
+        mdds[0], mdds[1] = mdds[1], mdds[0]
+        paths[0], paths[1] = paths[1], paths[0]
+    vertex = paths[0][-1]
+    mdd = [(t, e) for t, e in mdds[1] if t >= start]
     for i in range(start, end):
         mdd_vertex = set([e[1] for t, e in mdd if t == i])
-        if len(mdd_vertex) == 1 and mdd_vertex == {extended_vertex}:
+        if len(mdd_vertex) == 1 and mdd_vertex == {vertex}:
             return True
     return False
 
@@ -207,14 +214,7 @@ def find_cardinal_conflict(mdds, paths):
             return True
     if len(paths[0]) == len(paths[1]):
         return False
-    # Extend the shorter mdd to find a cardinal conflict
-    if len(paths[0]) > len(paths[1]):
-        mdds[0], mdds[1] = mdds[1], mdds[0]
-        paths[0], paths[1] = paths[1], paths[0]
-    vertex = paths[0][-1]
-    mdd = [(t, e) for t, e in mdds[1] if t >= min_timestep]
-    max_timestep = max(len(paths[0]), len(paths[1]))
-    return find_extended_mdd_conflict(vertex, mdd, min_timestep, max_timestep)
+    return find_extended_mdd_conflict(mdds, paths)
 
 
 def find_dependency(mdds, paths):
@@ -243,14 +243,7 @@ def find_dependency(mdds, paths):
             return True
     if len(paths[0]) == len(paths[1]):
         return False
-    # Extend the shorter mdd to find a cardinal conflict
-    if len(paths[0]) > len(paths[1]):
-        mdds[0], mdds[1] = mdds[1], mdds[0]
-        paths[0], paths[1] = paths[1], paths[0]
-    vertex = paths[0][-1]
-    mdd = [(t, e) for t, e in mdds[1] if t >= min_timestep]
-    max_timestep = max(len(paths[0]), len(paths[1]))
-    return find_extended_mdd_conflict(vertex, mdd, min_timestep, max_timestep)
+    return find_extended_mdd_conflict(mdds, paths)
 
 
 class CBSSolver(object):
