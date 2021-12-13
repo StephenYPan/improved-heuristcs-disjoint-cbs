@@ -494,7 +494,8 @@ class CBSSolver(object):
 
     def cg_heuristic(self, mdds, paths, collisions):
         """
-        Constructs an adjacency matrix of cardinal conflicting agents and calculates the min vertex cover
+        Constructs an adjacency matrix of cardinal conflicting agents 
+        and return the min vertex cover.
         """
         V = len(paths)
         E = 0
@@ -536,9 +537,7 @@ class CBSSolver(object):
 
     def dg_heuristic(self, mdds, paths, collisions):
         """
-        Constructs a adjacency matrix and returns the minimum vertex cover
-        
-        python3 run_experiments.py --instance custominstances/exp2.txt --solver CBS --batch --disjoint --dg
+        Constructs an adjacency matrix of dependency conflicts and return the minimum vertex cover.
         """
         V = len(mdds)
         E = 0
