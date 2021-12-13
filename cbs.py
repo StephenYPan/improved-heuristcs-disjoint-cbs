@@ -59,27 +59,16 @@ def standard_splitting(collision):
 
 def disjoint_splitting(collision, mdds):
     """
-    Weighted probabilities for choosing positive constraints between two agents. The agents' weight
-    is in relation to the number of different paths the other agent has at that timestep. For 
-    example, if a1 has 5 different paths and a2 has 2 path at timestep t, then a1 has a 2/7 chance 
-    of being chosen and a2 has a 5/7 chance of being chosen. 
-    
-    Special case when one agent has no path in their MDD at timestep t, then all the weight falls
-    onto the other agent.
-
-    Special case when one agent has only 1 path and the other has more than 1 path, then set the
-    agent with 1 path to be positive with a 100% chance.
+    Weighted probabilities for choosing positive constraints between two agents. When one agent has
+    no path in their MDD at timestep t, then all the weight falls onto the other agent. Otherwise,
+    the probabilities are 50/50.
     """
     result = standard_splitting(collision)
     a1_weight = len([e for t, e in mdds[result[0]['agent']] if t == result[0]['timestep']])
     a2_weight = len([e for t, e in mdds[result[1]['agent']] if t == result[0]['timestep']])
-    cum_weights = [a2_weight, a1_weight + a2_weight]
+    cum_weights = [1, 2]
     if not a1_weight or not a2_weight: # Special case, if either are zero
         cum_weights = [a1_weight, a1_weight + a2_weight]
-    elif a1_weight == 1 and a2_weight > 1:
-        cum_weights = [1, 1]
-    elif a2_weight == 1 and a1_weight > 1:
-        cum_weights = [0, 1]
     population = [
         [result[0]['agent'], result[0]['loc']],
         [result[1]['agent'], result[1]['loc']]
@@ -89,14 +78,6 @@ def disjoint_splitting(collision, mdds):
         result[i]['agent'] = chosen_agent[0]
         result[i]['loc'] = chosen_agent[1]
         result[i]['positive'] = predicate
-    
-    # Even probabilities
-    # result = standard_splitting(collision)
-    # rand_agent = random.randint(0, 1)
-    # for i, predicate in zip([0, 1], [True, False]):
-    #     result[i]['agent'] = result[rand_agent]['agent']
-    #     result[i]['loc'] = result[rand_agent]['loc']
-    #     result[i]['positive'] = predicate
     return result
 
 
