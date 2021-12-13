@@ -271,7 +271,6 @@ def find_dependency(mdds, paths):
     return find_extended_mdd_conflict(vertex, mdd, min_timestep, max_timestep)
 
 
-
 class CBSSolver(object):
     """The high-level search of CBS."""
 
