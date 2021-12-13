@@ -561,10 +561,8 @@ class CBSSolver(object):
                 self.h_cache_hit_time += timer.time() - h_start
             else:
                 mdd_pair = [mdds[a1], mdds[a2]]
-                agent_pair = [a1,a2]
                 path_pair = [paths[a1], paths[a2]]
-                min_timestep = min(len(path_pair[0]), len(path_pair[1]))
-                is_dependent = test_dependency(mdd_pair, agent_pair, path_pair, min_timestep)
+                is_dependent = find_dependency(mdd_pair, path_pair)
 
                 bool_size = getsizeof(is_dependent)
                 h_cache_size = getsizeof(self.h_cache)
@@ -720,7 +718,7 @@ class CBSSolver(object):
             'collisions': [],
             'mdds': []
         }
-        root['constraints'] = self.constraints
+        root['constraints'] = self.constraints 
         for i in range(self.num_of_agents):  # Find initial path for each agent
             path = a_star(self.my_map, self.starts[i], self.goals[i], self.goal_heuristics[i],
                           i, root['constraints'])
@@ -736,8 +734,10 @@ class CBSSolver(object):
         # get MDDs for each agent given their constraints
         mdd_start = timer.time()
         for i in range(self.num_of_agents):
-            agent_i_constraints = [c for c in root['constraints'] if c['agent'] == i]
-            mdds[i] = self.mdd(root['paths'][i], agent_i_constraints)
+            agent_i_constraints = []
+            if root['constraints']:
+                agent_i_constraints = [(c['timestep'], tuple(c['loc']), c['positive']) for c in root['constraints'] if c['agent'] == i]
+            mdds[i] = self.mdd(root['paths'][i], [c for c in root['constraints'] if c['agent']==i])
             self.mdd_cache[(i, hash(frozenset(agent_i_constraints)))] = mdds[i]
         root['mdds'] = mdds.copy()
         self.mdd_time += timer.time() - mdd_start
