@@ -3,6 +3,7 @@ from sys import getsizeof
 import time as timer
 import heapq
 import random
+import copy
 
 from collections import OrderedDict
 
@@ -615,8 +616,8 @@ class CBSSolver(object):
                 self.h_cache_hit += 1
                 self.h_cache_hit_time += timer.time() - h_start
             else:            
-                copy_constraints = constraints.copy() # Deep copy required for modification below
-                ta_constraints = [c for c in copy_constraints if (c['agent'] == a1) or (c['agent'] == a2)]
+                copy_constraints = copy.deepcopy(constraints) # Deep copy required for modification below
+                ta_constraints = [c for c in copy_constraints if (c['agent'] == a1) or (c['agent'] == a2) and (c['positive']==False)]
                 for c in ta_constraints:
                     c['agent']=int(c['agent']==a2)
 
@@ -625,6 +626,7 @@ class CBSSolver(object):
 
                 # Run a relaxed cbs problem
                 ta_cbs = CBSSolver(self.my_map, ta_starts, ta_goals, ta_constraints)
+                # print(ta_constraints)
                 new_paths = ta_cbs.find_solution(disjoint=True, stats=False, cg_heuristics=True)
                 edge_weight = max((len(new_paths[0])+len(new_paths[1]))-(len(paths[a1])+len(paths[a2])), 0)
                 
