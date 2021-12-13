@@ -351,8 +351,8 @@ class CBSSolver(object):
     def push_node(self, node):
         g_value = node['cost']
         h_value = node['h_value']
-        # tie_break = len(node['collisions'])
-        tie_break = 0
+        tie_break = len(node['collisions'])
+        # tie_break = 0
         if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
             f_value = g_value + h_value
             heapq.heappush(self.open_list, (f_value, h_value, tie_break, self.num_of_generated, node))
