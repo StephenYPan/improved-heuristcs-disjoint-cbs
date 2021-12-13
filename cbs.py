@@ -614,13 +614,9 @@ class CBSSolver(object):
                 self.h_cache.move_to_end(agent_hash_pair)
                 self.h_cache_hit += 1
                 self.h_cache_hit_time += timer.time() - h_start
-            else:
-                agent_pair = [a1,a2]
-                path_pair = [paths[a1], paths[a2]]
-                min_timestep = min(len(path_pair[0]), len(path_pair[1]))
-            
+            else:            
                 copy_constraints = constraints.copy() # Deep copy required for modification below
-                ta_constraints = [c for c in copy_constraints if c['agent'] == a1 or c['agent'] == a2 and not c['positive']]
+                ta_constraints = [c for c in copy_constraints if (c['agent'] == a1) or (c['agent'] == a2)]
                 for c in ta_constraints:
                     c['agent']=int(c['agent']==a2)
 
@@ -630,7 +626,8 @@ class CBSSolver(object):
                 # Run a relaxed cbs problem
                 ta_cbs = CBSSolver(self.my_map, ta_starts, ta_goals, ta_constraints)
                 new_paths = ta_cbs.find_solution(disjoint=True, stats=False, cg_heuristics=True)
-                edge_weight = (len(new_paths[0])+len(new_paths[1]))-(len(paths[a1])+len(paths[a2]))
+                edge_weight = max((len(new_paths[0])+len(new_paths[1]))-(len(paths[a1])+len(paths[a2])), 0)
+                
                 
                 int_size = getsizeof(edge_weight)
                 h_cache_size = getsizeof(self.h_cache)
