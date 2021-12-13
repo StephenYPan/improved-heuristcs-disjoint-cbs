@@ -293,6 +293,7 @@ class CBSSolver(object):
         self.open_list = []
 
         self.constraints = constraints if constraints else []
+        self.disjoint = False
         self.stats = True
         self.cg_heuristics = False
         self.dg_heuristics = False
@@ -691,6 +692,7 @@ class CBSSolver(object):
         dg_heuristics   - use dependency graph heuristics
         wdg_heuristics  - use weighted dependency graph heuristics
         """
+        self.disjoint = disjoint
         self.stats = stats
         self.cg_heuristics = cg_heuristics
         self.dg_heuristics = dg_heuristics
