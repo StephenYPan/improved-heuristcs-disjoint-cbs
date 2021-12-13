@@ -167,7 +167,7 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
                 'timestep': next_t,
                 'parent': cur_node
             }
-            if (next_loc, next_t) in closed_list and next_t:
+            if (next_loc, next_t) in closed_list:
                 existing_node = closed_list[(next_loc, next_t)]
                 if compare_nodes(new_node, existing_node):
                     closed_list[(next_loc, next_t)] = new_node
