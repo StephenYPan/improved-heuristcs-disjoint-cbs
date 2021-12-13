@@ -544,8 +544,6 @@ class CBSSolver(object):
         E = 0
         adj_matrix = [[0] * V for i in range(V)]
         is_dependent = False
-        # for a1 in range(0,V-1):
-        #     for a2 in range(a1+1,V):
         for c in collisions:
             h_start = timer.time()
             a1 = c['a1']
@@ -553,7 +551,6 @@ class CBSSolver(object):
             h_start = timer.time()
             hash_value = hash(frozenset(mdds[a2])) ^ hash(frozenset(mdds[a1]))
             agent_hash_pair = (a1, a2, hash_value)
-
             if agent_hash_pair in self.h_cache:
                 is_dependent = self.h_cache[agent_hash_pair]
                 self.h_cache.move_to_end(agent_hash_pair)
@@ -563,7 +560,6 @@ class CBSSolver(object):
                 mdd_pair = [mdds[a1], mdds[a2]]
                 path_pair = [paths[a1], paths[a2]]
                 is_dependent = find_dependency(mdd_pair, path_pair)
-
                 bool_size = getsizeof(is_dependent)
                 h_cache_size = getsizeof(self.h_cache)
                 while h_cache_size + bool_size > self.h_cache_max_size and len(self.h_cache) != 0:
@@ -573,20 +569,16 @@ class CBSSolver(object):
                 self.h_cache[agent_hash_pair] = is_dependent
                 self.h_cache_miss += 1
                 self.h_cache_miss_time += timer.time() - h_start
-
             adj_matrix[a1][a2] = is_dependent
             adj_matrix[a2][a1] = is_dependent
-            E+= is_dependent
-        
-        # E = sum(sum(adj_matrix,[]))/2
-        if E==1:
+            E += is_dependent
+        if E == 1:
             return 1
         mvc_timer = timer.time()
         min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
         self.ewmvc_mvc_time += timer.time() - mvc_timer
         return min_vertex_cover_value
 
-    
     def wdg_heuristic(self, mdds, paths, collisions, constraints):
         """
         Construct a weighted dependency graph and returns the edge weight minimum vertex cover
