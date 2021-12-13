@@ -199,10 +199,22 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
-def find_cardinal_conflict(mdds, min_timestep):
+def find_extended_mdd_conflict(extended_vertex, mdd, start, end):
     """
-    return true if there exists a cardinal conflict, otherwise false.
+    Return true if there exists a cardinal conflict with the extended mdd, otherwise false.
     """
+    for i in range(start, end):
+        mdd_vertex = set([e[1] for t, e in mdd if t == i])
+        if len(mdd_vertex) == 1 and mdd_vertex == {extended_vertex}:
+            return True
+    return False
+
+
+def find_cardinal_conflict(mdds, paths):
+    """
+    Return true if there exists a cardinal conflict, otherwise false.
+    """
+    min_timestep = min(len(paths[0]), len(paths[1]))
     for i in range(1, min_timestep):
         agent1_edge = [(v, u) for t, (u, v) in mdds[0] if t == i]
         agent2_edge = [e for t, e in mdds[1] if t == i]
@@ -212,53 +224,51 @@ def find_cardinal_conflict(mdds, min_timestep):
         agent2_vertex = set([e[1] for e in agent2_edge])
         if len(agent1_vertex) == 1 and len(agent2_vertex) == 1 and agent1_vertex == agent2_vertex:
             return True
-    return False
+    if len(paths[0]) == len(paths[1]):
+        return False
+    # Extend the shorter mdd to find a cardinal conflict
+    if len(paths[0]) > len(paths[1]):
+        mdds[0], mdds[1] = mdds[1], mdds[0]
+        paths[0], paths[1] = paths[1], paths[0]
+    vertex = paths[0][-1]
+    mdd = [(t, e) for t, e in mdds[1] if t >= min_timestep]
+    max_timestep = max(len(paths[0]), len(paths[1]))
+    return find_extended_mdd_conflict(vertex, mdd, min_timestep, max_timestep)
 
-
-def test_dependency(mdds, agents, paths, min_timestep):
+def find_dependency(mdds, paths):
     """
-    Merge two MDDs and return a decision tree.
-    return boolean. If dependent true, otherwise false.
+    Return true if there exists a dependency conflict, otherwise false.
     """
-    
-    # joint_mdd = set()
-    # agent1_start_loc = [e for t,e in mdds[0] if t==1][0][0]
-    # agent2_start_loc = [e for t,e in mdds[1] if t==1][0][0]
-    # joint_mdd.add((0, agent1_start_loc, agent2_start_loc))
-    # agent1_vertex = set()
-    # agent2_vertex = set()
-    # agent1_vertex.add(agent1_start_loc)
-    # agent2_vertex.add(agent2_start_loc)
-   
-
-    joint_mdd = set()
-    joint_mdd.add((0, paths[0][0], paths[1][0]))
+    min_timestep = min(len(paths[0]), len(paths[1]))
     agent1_vertex = set()
     agent2_vertex = set()
-    agent1_vertex.add(paths[0][0])
-    agent2_vertex.add(paths[1][0])
+    agent1_vertex.add((0, paths[0][0]))
+    agent2_vertex.add((0, paths[1][0]))
     for i in range(1, min_timestep):
-        agent1_edge = set([e for t, e in mdds[0] if (t == i) and e[0] in agent1_vertex])
-        agent2_edge = set([e for t, e in mdds[1] if (t == i) and e[0] in agent2_vertex])
-        agent1_vertex.clear()
-        agent2_vertex.clear()
-        num_edge = 0
+        agent1_edge = [e for t, e in mdds[0] if t == i and (t - 1, e[0]) in agent1_vertex]
+        agent2_edge = [e for t, e in mdds[1] if t == i and (t - 1, e[0]) in agent2_vertex]
+        dependency_conflict = True
         for e1 in agent1_edge:
             for e2 in agent2_edge:
-                if (e1[1]==e2[1]) or (e1[0]==e2[0]):
+                if (e1[1] == e2[1]): # Vertex collision
                     continue
-                if (e1[1]==e2[0]) and (e1[0]==e2[1]):
+                if (e1[1] == e2[0]) and (e1[0] == e2[1]): # Edge collision
                     continue
-                num_edge += 1
-                joint_mdd.add((i, e1, e2))
-                agent1_vertex.add(e1[1])
-                agent2_vertex.add(e2[1])
-        
-        if num_edge == 0:
+                dependency_conflict = False
+                agent1_vertex.add((i, e1[1]))
+                agent2_vertex.add((i, e2[1]))
+        if dependency_conflict:
             return True
-
-    
-    return False
+    if len(paths[0]) == len(paths[1]):
+        return False
+    # Extend the shorter mdd to find a cardinal conflict
+    if len(paths[0]) > len(paths[1]):
+        mdds[0], mdds[1] = mdds[1], mdds[0]
+        paths[0], paths[1] = paths[1], paths[0]
+    vertex = paths[0][-1]
+    mdd = [(t, e) for t, e in mdds[1] if t >= min_timestep]
+    max_timestep = max(len(paths[0]), len(paths[1]))
+    return find_extended_mdd_conflict(vertex, mdd, min_timestep, max_timestep)
 
 
 
@@ -340,7 +350,8 @@ class CBSSolver(object):
     def push_node(self, node):
         g_value = node['cost']
         h_value = node['h_value']
-        tie_break = len(node['collisions'])
+        # tie_break = len(node['collisions'])
+        tie_break = 0
         if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
             f_value = g_value + h_value
             heapq.heappush(self.open_list, (f_value, h_value, tie_break, self.num_of_generated, node))
@@ -380,7 +391,6 @@ class CBSSolver(object):
         negative constraints.
         """
         mdd = set()
-        mdd.add((0, path[0])) # TODO: Remove
         min_timestep = len(path)
         # Positive Constraints
         pos_constraint_timer = timer.time()
@@ -502,9 +512,9 @@ class CBSSolver(object):
                 self.h_cache_hit += 1
                 self.h_cache_hit_time += timer.time() - h_start
             else:
-                min_timestep = min(len(paths[a1]), len(paths[a2]))
                 conflict_mdds = [mdds[a1], mdds[a2]]
-                is_cardinal_conflict = find_cardinal_conflict(conflict_mdds, min_timestep)
+                path_pair = [paths[a1], paths[a2]]
+                is_cardinal_conflict = find_cardinal_conflict(conflict_mdds, path_pair)
                 bool_size = getsizeof(is_cardinal_conflict)
                 h_cache_size = getsizeof(self.h_cache)
                 while h_cache_size + bool_size > self.h_cache_max_size and len(self.h_cache) != 0:
@@ -573,7 +583,6 @@ class CBSSolver(object):
         # E = sum(sum(adj_matrix,[]))/2
         if E==1:
             return 1
-        
         mvc_timer = timer.time()
         min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
         self.ewmvc_mvc_time += timer.time() - mvc_timer
