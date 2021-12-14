@@ -843,14 +843,7 @@ class CBSSolver(object):
                 self.h_time += timer.time() - heuristics_start
 
                 self.push_node(new_node)
-        # print(pair_offset)
-        # print('root collision:', root['collisions'])
-        # print(len(root['constraints']), len(cur_node['constraints']))
-        # for c in root['constraints']:
-        #     print(c)
-        # print()
-        # for c in cur_node['constraints']:
-        #     print(c)
+
         raise BaseException('No solutions')
 
 
