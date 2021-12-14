@@ -705,7 +705,6 @@ class CBSSolver(object):
                 self.mdd_cache.move_to_end(agent_hash_pair)
                 self.mdd_cache_hit += 1
                 self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
-                pass
             else:
                 agent_i_constraints = [c for c in root['constraints'] if c['agent'] == i]
                 mdds[i] = self.mdd(root['paths'][i], agent_i_constraints)
