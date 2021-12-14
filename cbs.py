@@ -186,6 +186,8 @@ def find_extended_mdd_conflict(mdds, paths):
     """
     start = min(len(paths[0]), len(paths[1]))
     end = max(len(paths[0]), len(paths[1]))
+    if start == end:
+        return False
     if len(paths[0]) > len(paths[1]):
         mdds[0], mdds[1] = mdds[1], mdds[0]
         paths[0], paths[1] = paths[1], paths[0]
@@ -212,8 +214,6 @@ def find_cardinal_conflict(mdds, paths):
         agent2_vertex = set([e[1] for e in agent2_edge])
         if len(agent1_vertex) == 1 and len(agent2_vertex) == 1 and agent1_vertex == agent2_vertex:
             return True
-    if len(paths[0]) == len(paths[1]):
-        return False
     return find_extended_mdd_conflict(mdds, paths)
 
 
@@ -241,8 +241,6 @@ def find_dependency(mdds, paths):
                 agent2_vertex.add((i, e2[1]))
         if dependency_conflict:
             return True
-    if len(paths[0]) == len(paths[1]):
-        return False
     return find_extended_mdd_conflict(mdds, paths)
 
 
