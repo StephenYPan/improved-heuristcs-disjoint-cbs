@@ -181,7 +181,7 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
 
 def build_mdd(my_map, max_cost, cost_offset, start_h_values, goal_h_values):
     """
-    If building a mdd is converted to BFS/DFS then MDD calculations become impossible in maps larger
+    If build_mdd is converted to BFS/DFS then MDD calculations become impossible in maps larger
     than 8x8. The benefit of using BFS/DFS is the ability to construct a MDD such that it satisfies
     the constraints at the cost of adding duplicate edges to MDD. The number of duplicates edges
     increases to a point where computation time takes minutes from seconds.
