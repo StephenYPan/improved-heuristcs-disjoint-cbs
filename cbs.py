@@ -249,7 +249,8 @@ def find_dependency(mdds, paths):
 class CBSSolver(object):
     """The high-level search of CBS."""
 
-    def __init__(self, my_map, starts, goals, constraints=None):
+    def __init__(self, my_map, starts, goals, constraints=None,
+        h_cache=None, mdd_cache=None, low_lv_h_cache=None, partial_mdd_cache=None):
         """my_map   - list of lists specifying obstacle positions
         starts      - [(x1, y1), (x2, y2), ...] list of start locations
         goals       - [(x1, y1), (x2, y2), ...] list of goal locations
@@ -275,7 +276,7 @@ class CBSSolver(object):
 
         # High level heuristics cache
         self.ewmvc_mvc_time = 0
-        self.h_cache = OrderedDict()
+        self.h_cache = h_cache if h_cache else OrderedDict()
         self.h_time = 0
         self.h_cache_hit_time = 0
         self.h_cache_miss_time = 0
@@ -285,7 +286,7 @@ class CBSSolver(object):
         self.h_cache_evict_counter = 0
 
         # High level mdd cache
-        self.mdd_cache = OrderedDict()
+        self.mdd_cache = mdd_cache if mdd_cache else OrderedDict()
         self.mdd_time = 0
         self.mdd_pos_constraint_time = 0
         self.mdd_neg_constraint_time = 0
@@ -298,7 +299,7 @@ class CBSSolver(object):
         self.mdd_evict_counter = 0
 
         # Low-level heuristics cache
-        self.low_lv_h_cache = OrderedDict()
+        self.low_lv_h_cache = low_lv_h_cache if low_lv_h_cache else OrderedDict()
         self.low_lv_h_time = 0
         self.low_lv_h_cache_hit_time = 0
         self.low_lv_h_cache_miss_time = 0
@@ -308,7 +309,7 @@ class CBSSolver(object):
         self.low_lv_h_cache_evict_counter = 0
 
         # Partial mdd cache
-        self.partial_mdd_cache = OrderedDict()
+        self.partial_mdd_cache = partial_mdd_cache if partial_mdd_cache else OrderedDict()
         self.partial_mdd_time = 0
         self.partial_mdd_hit_time = 0
         self.partial_mdd_miss_time = 0
