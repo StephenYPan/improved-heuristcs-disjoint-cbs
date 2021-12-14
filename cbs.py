@@ -469,6 +469,63 @@ class CBSSolver(object):
         self.mdd_clean_up_time += timer.time() - clean_up_timer
         return mdd
 
+    def cache_stats(self):
+        stat_list = [
+            [
+                self.ewmvc_mvc_time, self.h_time, self.h_cache_hit_time, self.h_cache_miss_time,
+                self.h_cache_hit, self.h_cache_miss, self.h_cache_evict_counter
+            ],
+            [
+                self.mdd_time, self.mdd_pos_constraint_time, self.mdd_neg_constraint_time, 
+                self.mdd_clean_up_time, self.mdd_cache_hit_time, self.mdd_cache_miss_time, 
+                self.mdd_cache_hit, self.mdd_cache_miss, self.mdd_evict_counter
+            ],
+            [
+                self.low_lv_h_time, self.low_lv_h_cache_hit_time, self.low_lv_h_cache_miss_time,
+                self.low_lv_h_cache_hit, self.low_lv_h_cache_miss,
+                self.low_lv_h_cache_evict_counter
+            ],
+            [
+                self.partial_mdd_time, self.partial_mdd_hit_time, self.partial_mdd_miss_time,
+                self.partial_mdd_hit, self.partial_mdd_miss, self.partial_mdd_evict_counter
+            ]
+        ]
+        return stat_list
+
+    def adjust_cache_stats(self, cache_stats):
+        # High level heuristics cache
+        self.ewmvc_mvc_time += cache_stats[0][0]
+        self.h_time += cache_stats[0][1]
+        self.h_cache_hit_time += cache_stats[0][2]
+        self.h_cache_miss_time += cache_stats[0][3]
+        self.h_cache_hit += cache_stats[0][4]
+        self.h_cache_miss += cache_stats[0][5]
+        self.h_cache_evict_counter += cache_stats[0][6]
+        # High level mdd cache
+        self.mdd_time += cache_stats[1][0]
+        self.mdd_pos_constraint_time += cache_stats[1][1]
+        self.mdd_neg_constraint_time += cache_stats[1][2]
+        self.mdd_clean_up_time += cache_stats[1][3]
+        self.mdd_cache_hit_time += cache_stats[1][4]
+        self.mdd_cache_miss_time += cache_stats[1][5]
+        self.mdd_cache_hit += cache_stats[1][6]
+        self.mdd_cache_miss += cache_stats[1][7]
+        self.mdd_evict_counter += cache_stats[1][8]
+        # Low-level heuristics cache
+        self.low_lv_h_time += cache_stats[2][0]
+        self.low_lv_h_cache_hit_time += cache_stats[2][1]
+        self.low_lv_h_cache_miss_time += cache_stats[2][2]
+        self.low_lv_h_cache_hit += cache_stats[2][3]
+        self.low_lv_h_cache_miss += cache_stats[2][4]
+        self.low_lv_h_cache_evict_counter += cache_stats[2][5]
+        # Partial mdd cache
+        self.partial_mdd_time += cache_stats[3][0]
+        self.partial_mdd_hit_time += cache_stats[3][1]
+        self.partial_mdd_miss_time += cache_stats[3][2]
+        self.partial_mdd_hit += cache_stats[3][3]
+        self.partial_mdd_miss += cache_stats[3][4]
+        self.partial_mdd_evict_counter += cache_stats[3][5]
+
     def cg_heuristic(self, mdds, paths, collisions):
         """
         Constructs an adjacency matrix of cardinal conflicting agents 
@@ -587,20 +644,15 @@ class CBSSolver(object):
                 # a2 is guaranteed to be bigger than 0 because of how detect_collision orders it
                 pair_offset = [a1, a2 - 1]
                 # Run a relaxed cbs problem
+                cbs_start = timer.time()
                 cbs = CBSSolver(my_map=self.my_map, starts=substarts, goals=subgoals,
                     h_cache=self.h_cache, mdd_cache=self.mdd_cache,
                     low_lv_h_cache=self.low_lv_h_cache, partial_mdd_cache=self.partial_mdd_cache)
                 new_paths, cache_stats = cbs.find_solution(disjoint=self.disjoint, stats=False,
                     dg_heuristics=True, constraints=subconstraints, pair_offset=pair_offset)
+                cbs_end = timer.time() - cbs_start
                 # Account for child cbs cache hit/miss stats
-                self.h_cache_hit += cache_stats[0][0]
-                self.h_cache_miss += cache_stats[0][1]
-                self.low_lv_h_cache_hit += cache_stats[1][0]
-                self.low_lv_h_cache_miss += cache_stats[1][1]
-                self.partial_mdd_hit += cache_stats[2][0]
-                self.partial_mdd_miss += cache_stats[2][1]
-                self.mdd_cache_hit += cache_stats[3][0]
-                self.mdd_cache_miss += cache_stats[3][1]
+                self.adjust_cache_stats(cache_stats)
                 if new_paths:
                     # Get the maximum edge weight
                     a1_path_diff = len(new_paths[0]) - len(paths[a1])
@@ -617,7 +669,7 @@ class CBSSolver(object):
                     h_cache_size = getsizeof(self.h_cache)
                 self.h_cache[agent_hash_pair] = edge_weight
                 self.h_cache_miss += 1
-                self.h_cache_miss_time += timer.time() - h_start
+                self.h_cache_miss_time += timer.time() - h_start - cbs_end
             adj_matrix[a1][a2] = edge_weight
             adj_matrix[a2][a1] = edge_weight
             vertex_weights[a1] = max(vertex_weights[a1], edge_weight)
@@ -751,14 +803,8 @@ class CBSSolver(object):
             self.total_pop_h_value += cur_node['h_value']
             if not cur_node['collisions']: # Goal reached
                 if self.stats:
-                    self.print_results(cur_node)
-                cache_stats = [
-                    [self.h_cache_hit, self.h_cache_miss],
-                    [self.low_lv_h_cache_hit, self.low_lv_h_cache_miss],
-                    [self.partial_mdd_hit, self.partial_mdd_miss],
-                    [self.mdd_cache_hit, self.mdd_cache_miss]
-                ]
-                return cur_node['paths'], cache_stats
+                    self.print_results(cur_node)              
+                return cur_node['paths'], self.cache_stats()
             # TODO: Implement ICBS
             collision = cur_node['collisions'][0]
             constraints = disjoint_splitting(collision, cur_node['mdds']) if disjoint else standard_splitting(collision)
@@ -864,13 +910,7 @@ class CBSSolver(object):
 
                 self.push_node(new_node)
 
-        cache_stats = [
-            [self.h_cache_hit, self.h_cache_miss],
-            [self.low_lv_h_cache_hit, self.low_lv_h_cache_miss],
-            [self.partial_mdd_hit, self.partial_mdd_miss],
-            [self.mdd_cache_hit, self.mdd_cache_miss]
-        ]
-        return None, cache_stats # Failed to find solutions
+        return None, self.cache_stats() # Failed to find solutions
 
 
     def print_results(self, node):
