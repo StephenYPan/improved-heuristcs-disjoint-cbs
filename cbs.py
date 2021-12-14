@@ -718,7 +718,6 @@ class CBSSolver(object):
                 self.mdd_cache[agent_hash_pair] = mdds[i]
                 self.mdd_cache_miss += 1
                 self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
-                self.mdd_cache[agent_hash_pair] = mdds[i]
         root['mdds'] = mdds.copy()
         self.mdd_time += timer.time() - mdd_start
 
