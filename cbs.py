@@ -653,7 +653,8 @@ class CBSSolver(object):
                 cbs_end = timer.time() - cbs_start
                 # The time spent performing cbs search should be categorized as miss time
                 cbs_cpu_time = cbs_end - cache_stats[0][1] - cache_stats[1][0]
-                self.h_time -= cbs_end - cbs_cpu_time # Avoid double counting
+                # Only remove the time being redistributed into other categories
+                self.h_time -= cbs_end - cbs_cpu_time
                 self.adjust_cache_stats(cache_stats)
                 if new_paths:
                     # Get the maximum edge weight
