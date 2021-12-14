@@ -651,7 +651,7 @@ class CBSSolver(object):
                 new_paths, cache_stats = cbs.find_solution(disjoint=self.disjoint, stats=False,
                     dg_heuristics=True, constraints=subconstraints, pair_offset=pair_offset)
                 cbs_end = timer.time() - cbs_start
-                # Account for child cbs cache hit/miss stats
+                self.h_time -= cbs_end # Avoid double counting
                 self.adjust_cache_stats(cache_stats)
                 if new_paths:
                     # Get the maximum edge weight
