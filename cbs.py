@@ -651,7 +651,9 @@ class CBSSolver(object):
                 new_paths, cache_stats = cbs.find_solution(disjoint=self.disjoint, stats=False,
                     dg_heuristics=True, constraints=subconstraints, pair_offset=pair_offset)
                 cbs_end = timer.time() - cbs_start
-                self.h_time -= cbs_end # Avoid double counting
+                # The time spent performing cbs search should be categorized as miss time
+                cbs_cpu_time = cbs_end - cache_stats[0][1] - cache_stats[1][0]
+                self.h_time -= cbs_end - cbs_cpu_time # Avoid double counting
                 self.adjust_cache_stats(cache_stats)
                 if new_paths:
                     # Get the maximum edge weight
@@ -669,7 +671,7 @@ class CBSSolver(object):
                     h_cache_size = getsizeof(self.h_cache)
                 self.h_cache[agent_hash_pair] = edge_weight
                 self.h_cache_miss += 1
-                self.h_cache_miss_time += timer.time() - h_start - cbs_end
+                self.h_cache_miss_time += timer.time() - h_start - cbs_end + cbs_cpu_time
             adj_matrix[a1][a2] = edge_weight
             adj_matrix[a2][a1] = edge_weight
             vertex_weights[a1] = max(vertex_weights[a1], edge_weight)
