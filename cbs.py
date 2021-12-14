@@ -487,9 +487,9 @@ class CBSSolver(object):
                 self.h_cache_hit += 1
                 self.h_cache_hit_time += timer.time() - h_start
             else:
-                conflict_mdds = [mdds[a1], mdds[a2]]
+                mdd_pair = [mdds[a1], mdds[a2]]
                 path_pair = [paths[a1], paths[a2]]
-                is_cardinal_conflict = find_cardinal_conflict(conflict_mdds, path_pair)
+                is_cardinal_conflict = find_cardinal_conflict(mdd_pair, path_pair)
                 bool_size = getsizeof(is_cardinal_conflict)
                 h_cache_size = getsizeof(self.h_cache)
                 while h_cache_size + bool_size > self.h_cache_max_size and len(self.h_cache) != 0:
