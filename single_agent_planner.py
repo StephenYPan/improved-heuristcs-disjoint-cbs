@@ -188,9 +188,9 @@ def build_mdd(my_map, max_cost, cost_offset, start_h_values, goal_h_values):
     """
     ict = set()
     valid_loc = [(v, h) for v, h in start_h_values.items() if h + goal_h_values[v] < max_cost]
-    for t in range(max_cost):
-        cur_loc = [v for v, h in valid_loc if h <= t and t + goal_h_values[v] < max_cost]
-        for v in cur_loc:
+    for t in range(max_cost - 1):
+        possible_loc = [v for v, h in valid_loc if h <= t and t + goal_h_values[v] < max_cost]
+        for v in possible_loc:
             for direction in range(5):
                 next_v = move(v, direction)
                 next_t = t + 1
