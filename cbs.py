@@ -653,7 +653,7 @@ class CBSSolver(object):
                 cbs_end = timer.time() - cbs_start
                 # The time spent performing cbs search should be categorized as miss time
                 cbs_cpu_time = cbs_end - cache_stats[0][1] - cache_stats[1][0]
-                # Only remove the time being redistributed into other categories
+                # Only remove the redistributed times
                 self.h_time -= cbs_end - cbs_cpu_time
                 self.adjust_cache_stats(cache_stats)
                 if new_paths:
@@ -662,7 +662,7 @@ class CBSSolver(object):
                     a2_path_diff = len(new_paths[1]) - len(paths[a2])
                     edge_weight = max(a1_path_diff, a2_path_diff, 1)
                 else:
-                    # The collision may not produce a solution. Defaults to 1 like to dg_heuristic
+                    # The collision may not produce a solution. Defaults to 1 like dg_heuristic
                     edge_weight = 1
                 int_size = getsizeof(edge_weight)
                 h_cache_size = getsizeof(self.h_cache)
