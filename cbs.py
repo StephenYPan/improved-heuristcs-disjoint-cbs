@@ -223,23 +223,22 @@ def find_dependency_conflict(mdds, paths):
     Return true if there exists a dependency conflict, otherwise false.
     """
     min_timestep = min(len(paths[0]), len(paths[1]))
-    agent1_vertex = set()
-    agent2_vertex = set()
-    agent1_vertex.add((0, paths[0][0]))
-    agent2_vertex.add((0, paths[1][0]))
+    joint_mdd = set()
+    joint_mdd.add((0, (paths[0][0], paths[1][0])))
     for i in range(1, min_timestep):
-        agent1_edge = [e for t, e in mdds[0] if t == i and (t - 1, e[0]) in agent1_vertex]
-        agent2_edge = [e for t, e in mdds[1] if t == i and (t - 1, e[0]) in agent2_vertex]
+        agent1_edge = [e for t, e in mdds[0] if t == i]
+        agent2_edge = [e for t, e in mdds[1] if t == i]
         dependency_conflict = True
         for e1 in agent1_edge:
             for e2 in agent2_edge:
+                if (i - 1, (e1[0], e2[0])) not in joint_mdd:
+                    continue
                 if e1[1] == e2[1]: # Vertex collision
                     continue
                 if e1[1] == e2[0] and e1[0] == e2[1]: # Edge collision
                     continue
                 dependency_conflict = False
-                agent1_vertex.add((i, e1[1]))
-                agent2_vertex.add((i, e2[1]))
+                joint_mdd.add((i, (e1[1], e2[1])))
         if dependency_conflict:
             return True
     return find_extended_mdd_conflict(mdds, paths)
@@ -271,6 +270,11 @@ class CBSSolver(object):
         self.cg_heuristics = False
         self.dg_heuristics = False
         self.wdg_heuristics = False
+
+        # h-value statistics
+        self.root_h_value = 0
+        self.total_pop_h_value = 0
+        self.total_push_h_value = 0
 
         # High level heuristics cache
         self.ewmvc_mvc_time = 0
@@ -730,12 +734,14 @@ class CBSSolver(object):
         if wdg_heuristics:
             root_h_value = max(root_h_value, self.wdg_heuristic(mdds, root['paths'], root['collisions'], root['constraints']))
         root['h_value'] = root_h_value
+        self.root_h_value = root_h_value
         self.h_time += timer.time() - heuristics_start
 
         self.push_node(root)
 
         while self.open_list:
             cur_node = self.pop_node()
+            self.total_pop_h_value += cur_node['h_value']
             if not cur_node['collisions']: # Goal reached
                 if self.stats:
                     self.print_results(cur_node)
@@ -840,6 +846,7 @@ class CBSSolver(object):
                 if wdg_heuristics:
                     h_value = max(h_value, self.wdg_heuristic(mdds, new_node['paths'], new_node['collisions'], new_node['constraints']))
                 new_node['h_value'] = h_value
+                self.total_push_h_value += h_value
                 self.h_time += timer.time() - heuristics_start
 
                 self.push_node(new_node)
@@ -858,6 +865,9 @@ class CBSSolver(object):
         print(f'Search time:        {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
         print(f'Overhead time:      {overhead:.2f} ({overhead / self.CPU_time * 100:05.2f}%)')
         print(f'Overhead ratio:     {overhead / search_time:.2f}:1')
+        print(f'Root h-value:       {self.root_h_value}')
+        print(f'Avg pop h-value:    {self.total_pop_h_value / self.num_of_expanded:.2f}')
+        print(f'Avg push h-value:   {self.total_push_h_value / self.num_of_generated:.2f}')
         print(f'Heuristics cache:   {getsizeof(self.h_cache)} (bytes)')
         print(f'Heuristics time:    {self.h_time:.2f}')
         print(f' - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
