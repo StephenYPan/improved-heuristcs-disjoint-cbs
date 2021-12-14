@@ -7,7 +7,7 @@ import copy
 
 from collections import OrderedDict
 
-from single_agent_planner import compute_heuristics, a_star, get_location, get_sum_of_cost, increased_cost_tree_search
+from single_agent_planner import compute_heuristics, a_star, get_location, get_sum_of_cost, build_mdd
 
 
 def detect_collision(path1, path2):
@@ -421,7 +421,7 @@ class CBSSolver(object):
                 self.partial_mdd_hit += 1
                 self.partial_mdd_hit_time += timer.time() - partial_mdd_timer
             else:
-                partial_mdd = increased_cost_tree_search(self.my_map, max_cost, cost_offset, h_values[0], h_values[1])
+                partial_mdd = build_mdd(self.my_map, max_cost, cost_offset, h_values[0], h_values[1])
                 partial_mdd_size = getsizeof(partial_mdd)
                 partial_mdd_cache_size = getsizeof(self.partial_mdd_cache)
                 while partial_mdd_cache_size + partial_mdd_size > self.partial_mdd_max_size and len(self.partial_mdd_cache) != 0:

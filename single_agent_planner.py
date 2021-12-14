@@ -179,7 +179,7 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
     return None  # Failed to find solutions
 
 
-def increased_cost_tree_search(my_map, max_cost, cost_offset, start_h_values, goal_h_values):
+def build_mdd(my_map, max_cost, cost_offset, start_h_values, goal_h_values):
     """
     If ICTS is converted to BFS/DFS then MDD calculations become impossible in maps larger than 8x8.
     The benefit of using BFS/DFS is the ability to construct a MDD such that it satisfies the 
