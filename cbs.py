@@ -1,4 +1,3 @@
-from logging import raiseExceptions
 from sys import getsizeof
 import time as timer
 import heapq
@@ -587,18 +586,27 @@ class CBSSolver(object):
                     c['agent'] = int(c['agent'] == a2)
                 # a2 is guaranteed to be bigger than 0 because of how detect_collision orders it
                 pair_offset = [a1, a2 - 1]
-                try:
-                    # Run a relaxed cbs problem
-                    cbs = CBSSolver(my_map=self.my_map, starts=substarts, goals=subgoals,
-                        h_cache=self.h_cache, mdd_cache=self.mdd_cache,
-                        low_lv_h_cache=self.low_lv_h_cache, partial_mdd_cache=self.partial_mdd_cache)
-                    new_paths = cbs.find_solution(disjoint=self.disjoint, stats=False,
-                        dg_heuristics=True, constraints=subconstraints, pair_offset=pair_offset)
+                # Run a relaxed cbs problem
+                cbs = CBSSolver(my_map=self.my_map, starts=substarts, goals=subgoals,
+                    h_cache=self.h_cache, mdd_cache=self.mdd_cache,
+                    low_lv_h_cache=self.low_lv_h_cache, partial_mdd_cache=self.partial_mdd_cache)
+                new_paths, cache_stats = cbs.find_solution(disjoint=self.disjoint, stats=False,
+                    dg_heuristics=True, constraints=subconstraints, pair_offset=pair_offset)
+                # Account for child cbs cache hit/miss stats
+                self.h_cache_hit += cache_stats[0][0]
+                self.h_cache_miss += cache_stats[0][1]
+                self.low_lv_h_cache_hit += cache_stats[1][0]
+                self.low_lv_h_cache_miss += cache_stats[1][1]
+                self.partial_mdd_hit += cache_stats[2][0]
+                self.partial_mdd_miss += cache_stats[2][1]
+                self.mdd_cache_hit += cache_stats[3][0]
+                self.mdd_cache_miss += cache_stats[3][1]
+                if new_paths:
                     # Get the maximum edge weight
                     a1_path_diff = len(new_paths[0]) - len(paths[a1])
                     a2_path_diff = len(new_paths[1]) - len(paths[a2])
                     edge_weight = max(a1_path_diff, a2_path_diff, 1)
-                except BaseException:
+                else:
                     # The collision may not produce a solution. Defaults to 1 like to dg_heuristic
                     edge_weight = 1
                 int_size = getsizeof(edge_weight)
@@ -656,7 +664,6 @@ class CBSSolver(object):
             min_vertex_weight_value -= vertex_weight_diff
         self.ewmvc_mvc_time += timer.time() - mvc_timer
         return min_vertex_weight_value
-
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False,
         wdg_heuristics=False, stats=True, constraints=None, pair_offset=None):
@@ -745,7 +752,13 @@ class CBSSolver(object):
             if not cur_node['collisions']: # Goal reached
                 if self.stats:
                     self.print_results(cur_node)
-                return cur_node['paths']
+                cache_stats = [
+                    [self.h_cache_hit, self.h_cache_miss],
+                    [self.low_lv_h_cache_hit, self.low_lv_h_cache_miss],
+                    [self.partial_mdd_hit, self.partial_mdd_miss],
+                    [self.mdd_cache_hit, self.mdd_cache_miss]
+                ]
+                return cur_node['paths'], cache_stats
             # TODO: Implement ICBS
             collision = cur_node['collisions'][0]
             constraints = disjoint_splitting(collision, cur_node['mdds']) if disjoint else standard_splitting(collision)
@@ -851,7 +864,13 @@ class CBSSolver(object):
 
                 self.push_node(new_node)
 
-        raise BaseException('No solutions')
+        cache_stats = [
+            [self.h_cache_hit, self.h_cache_miss],
+            [self.low_lv_h_cache_hit, self.low_lv_h_cache_miss],
+            [self.partial_mdd_hit, self.partial_mdd_miss],
+            [self.mdd_cache_hit, self.mdd_cache_miss]
+        ]
+        return None, cache_stats # Failed to find solutions
 
 
     def print_results(self, node):
