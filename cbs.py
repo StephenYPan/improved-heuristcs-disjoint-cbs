@@ -513,7 +513,7 @@ class CBSSolver(object):
         """
         Constructs an adjacency matrix of dependency conflicts and return the minimum vertex cover.
         """
-        V = len(mdds)
+        V = len(paths)
         E = 0
         adj_matrix = [[0] * V for i in range(V)]
         is_dependency_conflict = False
