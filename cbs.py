@@ -522,7 +522,6 @@ class CBSSolver(object):
             h_start = timer.time()
             a1 = c['a1']
             a2 = c['a2']
-            h_start = timer.time()
             hash_value = hash(frozenset(mdds[a2])) ^ hash(frozenset(mdds[a1]))
             agent_hash_pair = (a1, a2, hash_value)
             if agent_hash_pair in self.h_cache:
@@ -695,14 +694,31 @@ class CBSSolver(object):
 
         mdds = [None] * self.num_of_agents
 
-        # get MDDs for each agent given their constraints
+        # get MDDs for each agent given their constraints, check cache if it exists
         mdd_start = timer.time()
         for i in range(self.num_of_agents):
-            agent_i_constraints = []
-            if root['constraints']:
-                agent_i_constraints = [(c['timestep'], tuple(c['loc']), c['positive']) for c in root['constraints'] if c['agent'] == i]
-            mdds[i] = self.mdd(root['paths'][i], [c for c in root['constraints'] if c['agent']==i])
-            self.mdd_cache[(i, hash(frozenset(agent_i_constraints)))] = mdds[i]
+            mdd_cache_timer = timer.time()
+            hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in root['constraints'] if c['agent'] == i]))
+            agent_hash_pair = (i, hash_value)
+            if agent_hash_pair in self.mdd_cache:
+                mdds[i] = self.mdd_cache[agent_hash_pair]
+                self.mdd_cache.move_to_end(agent_hash_pair)
+                self.mdd_cache_hit += 1
+                self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
+                pass
+            else:
+                agent_i_constraints = [c for c in root['constraints'] if c['agent'] == i]
+                mdds[i] = self.mdd(root['paths'][i], agent_i_constraints)
+                mdd_size = getsizeof(mdds[i])
+                mdd_cache_size = getsizeof(self.mdd_cache)
+                while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
+                    self.mdd_evict_counter += 1
+                    self.mdd_cache.popitem()
+                    mdd_cache_size = getsizeof(self.mdd_cache)
+                self.mdd_cache[agent_hash_pair] = mdds[i]
+                self.mdd_cache_miss += 1
+                self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
+                self.mdd_cache[agent_hash_pair] = mdds[i]
         root['mdds'] = mdds.copy()
         self.mdd_time += timer.time() - mdd_start
 
