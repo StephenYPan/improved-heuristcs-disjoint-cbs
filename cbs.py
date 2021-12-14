@@ -482,7 +482,7 @@ class CBSSolver(object):
             a1 = c['a1']
             a2 = c['a2']
             hash_value = hash(frozenset(mdds[a2])) ^ hash(frozenset(mdds[a1]))
-            agent_hash_pair = (a1, a2, hash_value)
+            agent_hash_pair = ('cg', a1, a2, hash_value)
             if agent_hash_pair in self.h_cache:
                 is_cardinal_conflict = self.h_cache[agent_hash_pair]
                 self.h_cache.move_to_end(agent_hash_pair)
@@ -524,7 +524,7 @@ class CBSSolver(object):
             a1 = c['a1']
             a2 = c['a2']
             hash_value = hash(frozenset(mdds[a2])) ^ hash(frozenset(mdds[a1]))
-            agent_hash_pair = (a1, a2, hash_value)
+            agent_hash_pair = ('dg', a1, a2, hash_value)
             if agent_hash_pair in self.h_cache:
                 is_dependency_conflict = self.h_cache[agent_hash_pair]
                 self.h_cache.move_to_end(agent_hash_pair)
