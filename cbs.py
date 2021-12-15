@@ -359,7 +359,83 @@ class CBSSolver(object):
                 right = mid
         self.open_list = self.open_list[0:right]
    
-    def mdd(self, path, constraints):
+    def filter_mdd(self, mdd, path, neg_constraint):
+        """
+        Remove a single negative constraint from the MDD
+        """
+        neg_constraint_timer = timer.time()
+        min_timestep = len(path)
+        loc = neg_constraint['loc']
+        timestep = neg_constraint['timestep']
+        if len(loc) == 1:
+            loc = loc[0]
+            # Remove vertices and the relating vertices in the next timestep
+            edges_to_remove = [(t, e) for t, e in mdd if (t == timestep and e[1] == loc) or (t == timestep + 1 and e[0] == loc)]
+            for t, e in edges_to_remove:
+                mdd.remove((t, e))
+        else:
+            loc = tuple(loc)
+            if (timestep, loc) in mdd: # MDD may not have the negative edge
+                mdd.remove((timestep, loc))
+        self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
+        # Clean up, remove non-connecting nodes
+        clean_up_timer = timer.time()
+        for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without children
+            cur_vertex = set([e[0] for t, e in mdd if t == i])
+            prev_t = i - 1
+            prev_layer = [e for t, e in mdd if t == prev_t and e[1] not in cur_vertex]
+            for e in prev_layer:
+                mdd.remove((prev_t, e))
+        for i in range(1, min_timestep - 1): # Remove forward, nodes without parents
+            cur_vertex = set([e[1] for t, e in mdd if t == i])
+            next_t = i + 1
+            next_layer = [e for t, e in mdd if t == next_t and e[0] not in cur_vertex]
+            for e in next_layer:
+                mdd.remove((next_t, e))
+        for i, e in enumerate(zip(path, path[1:])):
+            assert ((i + 1, e) in mdd) is True, 'filtered mdd does not contain path edges'
+        self.mdd_clean_up_time += timer.time() - clean_up_timer
+        return mdd
+
+    def get_mdd_from_cache(self, agent, agent_offset, path, constraints):
+        mdd_cache_timer = timer.time()
+        mdd = None
+        hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in constraints]))
+        hash_pair = (agent + agent_offset[agent], len(path), hash_value)
+        if hash_pair in self.mdd_cache:
+            mdd = self.mdd_cache[hash_pair]
+            self.mdd_cache.move_to_end(hash_pair)
+            self.mdd_cache_hit += 1
+            self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
+        else:
+            # Try again for a cache hit with the old constraints only iff the newly added constraint
+            # is a negative constraint. This reduces the time spent filtering from scratch a brand
+            # new MDD of depth n. Fetch the old MDD of depth n and adjust for the new negative
+            # constraint.
+            if constraints:
+                new_constraint = constraints[-1]
+                old_constraints = constraints[:len(constraints) - 1]
+                old_hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in old_constraints]))
+                old_hash_pair = (agent + agent_offset[agent], len(path), old_hash_value)
+                if not new_constraint['positive'] and old_hash_pair in self.mdd_cache:
+                    old_mdd = self.mdd_cache[old_hash_pair].copy()
+                    mdd = self.filter_mdd(old_mdd, path, new_constraint)
+                    self.mdd_cache_hit += 1
+            if not mdd:
+                # Actual cache miss
+                mdd = self.get_mdd(path, constraints)
+            mdd_size = getsizeof(mdd)
+            mdd_cache_size = getsizeof(self.mdd_cache)
+            while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
+                self.mdd_evict_counter += 1
+                self.mdd_cache.popitem()
+                mdd_cache_size = getsizeof(self.mdd_cache)
+            self.mdd_cache[hash_pair] = mdd
+            self.mdd_cache_miss += 1
+            self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
+        return mdd
+
+    def get_mdd(self, path, constraints):
         """
         Every positive constraint is the same as having intermediary goal nodes along the path
         towards the final goal. Therefore, you can calculate the MDD from (s to n), (n to m), 
@@ -432,12 +508,12 @@ class CBSSolver(object):
                 self.partial_mdd_miss_time += timer.time() - partial_mdd_timer
             mdd = mdd | partial_mdd # Set union
             self.partial_mdd_time += timer.time() - partial_mdd_timer
-        for i, e in enumerate(zip(path, path[1:])):
-            assert ((i + 1, e) in mdd) is True, 'mdd does not contain path edges'
         # Negative Constraints
         neg_constraint_timer = timer.time()
         neg_constraints = [(c['timestep'], c['loc']) for c in constraints if c['positive'] == False and c['timestep'] < min_timestep]
         if len(neg_constraints) == 0: #  Exit early, MDD was not modified
+            for i, e in enumerate(zip(path, path[1:])):
+                assert ((i + 1, e) in mdd) is True, 'mdd does not contain path edges'
             self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
             return mdd
         for timestep, loc in neg_constraints:
@@ -466,6 +542,8 @@ class CBSSolver(object):
             next_layer = [e for t, e in mdd if t == next_t and e[0] not in cur_vertex]
             for e in next_layer:
                 mdd.remove((next_t, e))
+        for i, e in enumerate(zip(path, path[1:])):
+            assert ((i + 1, e) in mdd) is True, 'cleaned up mdd does not contain path edges'
         self.mdd_clean_up_time += timer.time() - clean_up_timer
         return mdd
 
@@ -653,14 +731,14 @@ class CBSSolver(object):
                 for c in subconstraints:
                     c['agent'] = int(c['agent'] == a2)
                 # a2 is guaranteed to be bigger than 0 because of how detect_collision orders it
-                pair_offset = [a1, a2 - 1]
+                agent_offset = [a1, a2 - 1]
                 # Run a relaxed cbs problem
                 cbs_start = timer.time()
                 cbs = CBSSolver(my_map=self.my_map, starts=substarts, goals=subgoals,
                     h_cache=self.h_cache, mdd_cache=self.mdd_cache,
                     low_lv_h_cache=self.low_lv_h_cache, partial_mdd_cache=self.partial_mdd_cache)
                 new_paths, cache_stats = cbs.find_solution(disjoint=self.disjoint, stats=False,
-                    dg_heuristics=True, constraints=subconstraints, pair_offset=pair_offset)
+                    dg_heuristics=True, constraints=subconstraints, agent_offset=agent_offset)
                 cbs_end = timer.time() - cbs_start
                 # The time spent performing cbs search should be categorized as miss time
                 cbs_cpu_time = cbs_end - cache_stats[0][1] - cache_stats[1][0]
@@ -732,14 +810,14 @@ class CBSSolver(object):
         return min_vertex_weight_value
 
     def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False,
-        wdg_heuristics=False, stats=True, constraints=None, pair_offset=None):
+        wdg_heuristics=False, stats=True, constraints=None, agent_offset=None):
         """ Finds paths for all agents from their start locations to their goal locations
 
         disjoint        - use disjoint splitting or not
         cg_heuristics   - use conflict graph heuristics
         dg_heuristics   - use dependency graph heuristics
         wdg_heuristics  - use weighted dependency graph heuristics
-        pair_offset     - for cache utilization when running cbs on pairs of agent in wdg heuristic
+        agent_offset     - for cache utilization when running cbs on pairs of agent in wdg heuristic
         """
         self.disjoint = disjoint
         self.stats = stats
@@ -769,32 +847,14 @@ class CBSSolver(object):
         root['cost'] = get_sum_of_cost(root['paths'])
 
         mdds = [None] * self.num_of_agents
-        if not pair_offset:
-            pair_offset = [0] * self.num_of_agents
+        if not agent_offset:
+            agent_offset = [0] * self.num_of_agents
 
-        # get MDDs for each agent given their constraints, check cache if it exists
+        # Fetch MDD from cache
         mdd_start = timer.time()
         for i in range(self.num_of_agents):
-            mdd_cache_timer = timer.time()
-            hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in root['constraints'] if c['agent'] == i]))
-            agent_hash_pair = (i + pair_offset[i], hash_value)
-            if agent_hash_pair in self.mdd_cache:
-                mdds[i] = self.mdd_cache[agent_hash_pair]
-                self.mdd_cache.move_to_end(agent_hash_pair)
-                self.mdd_cache_hit += 1
-                self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
-            else:
-                agent_i_constraints = [c for c in root['constraints'] if c['agent'] == i]
-                mdds[i] = self.mdd(root['paths'][i], agent_i_constraints)
-                mdd_size = getsizeof(mdds[i])
-                mdd_cache_size = getsizeof(self.mdd_cache)
-                while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
-                    self.mdd_evict_counter += 1
-                    self.mdd_cache.popitem()
-                    mdd_cache_size = getsizeof(self.mdd_cache)
-                self.mdd_cache[agent_hash_pair] = mdds[i]
-                self.mdd_cache_miss += 1
-                self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
+            constraints = [c for c in root['constraints'] if c['agent'] == i]
+            mdds[i] = self.get_mdd_from_cache(i, agent_offset, root['paths'][i], constraints)
         root['mdds'] = mdds.copy()
         self.mdd_time += timer.time() - mdd_start
 
@@ -818,7 +878,7 @@ class CBSSolver(object):
             if not cur_node['collisions']: # Goal reached
                 if self.stats:
                     self.print_results(cur_node)              
-                return cur_node['paths'], self.cache_stats()
+                return (cur_node['paths'], self.cache_stats())
             # Find and split on cardinal conflicts if any
             collision = self.get_cardinal_collision(cur_node['mdds'], cur_node['paths'], cur_node['collisions'])
             constraints = disjoint_splitting(collision, cur_node['mdds']) if disjoint else standard_splitting(collision)
@@ -884,29 +944,11 @@ class CBSSolver(object):
                 new_node['collisions'] = detect_collisions(new_node['paths'])
                 new_node['cost'] = get_sum_of_cost(new_node['paths'])
 
-                # Cache the MDDs
+                # Fetch MDD from cache
                 mdd_start = timer.time()
                 for i in range(self.num_of_agents):
-                    mdd_cache_timer = timer.time()
-                    hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i]))
-                    agent_hash_pair = (i + pair_offset[i], hash_value)
-                    if agent_hash_pair in self.mdd_cache:
-                        mdds[i] = self.mdd_cache[agent_hash_pair]
-                        self.mdd_cache.move_to_end(agent_hash_pair)
-                        self.mdd_cache_hit += 1
-                        self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
-                    else:
-                        agent_i_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
-                        mdds[i] = self.mdd(new_node['paths'][i], agent_i_constraints)
-                        mdd_size = getsizeof(mdds[i])
-                        mdd_cache_size = getsizeof(self.mdd_cache)
-                        while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
-                            self.mdd_evict_counter += 1
-                            self.mdd_cache.popitem()
-                            mdd_cache_size = getsizeof(self.mdd_cache)
-                        self.mdd_cache[agent_hash_pair] = mdds[i]
-                        self.mdd_cache_miss += 1
-                        self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
+                    constraints = [c for c in new_node['constraints'] if c['agent'] == i]
+                    mdds[i] = self.get_mdd_from_cache(i, agent_offset, new_node['paths'][i], constraints)
                 new_node['mdds'] = mdds.copy()
                 self.mdd_time += timer.time() - mdd_start
 
@@ -924,7 +966,7 @@ class CBSSolver(object):
 
                 self.push_node(new_node)
 
-        return None, self.cache_stats() # Failed to find solutions
+        return (None, self.cache_stats()) # Failed to find solutions
 
 
     def print_results(self, node):
