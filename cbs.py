@@ -408,9 +408,9 @@ class CBSSolver(object):
             self.mdd_cache_hit += 1
             self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
         else:
-            # Try again for a cache hit with the old constraints only iff the newly added constraint
-            # is a negative constraint. This reduces the time spent filtering from scratch a brand
-            # new MDD of depth n. Fetch the old MDD of depth n and adjust for the new negative
+            # Try again for a cache hit with the old constraints iff the newly added constraint is
+            # a negative constraint. This reduces the time spent filtering from scratch a brand new
+            # MDD of depth n. Fetch the old MDD of depth n and adjust for the new negative
             # constraint.
             if constraints and not constraints[-1]['positive']:
                 old_constraints = constraints[:len(constraints) - 1]
