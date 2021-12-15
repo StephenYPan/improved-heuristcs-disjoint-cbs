@@ -294,7 +294,7 @@ class CBSSolver(object):
         self.mdd_clean_up_time = 0
         self.mdd_cache_hit_time = 0
         self.mdd_cache_miss_time = 0
-        self.mdd_cache_max_size = 2**20 # 1 Mib, TODO: TUNE HYPERPARAMETER
+        self.mdd_cache_max_size = 2**21 # 2 Mib, TODO: TUNE HYPERPARAMETER
         self.mdd_cache_hit = 0
         self.mdd_cache_miss = 0
         self.mdd_evict_counter = 0
