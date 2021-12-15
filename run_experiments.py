@@ -101,7 +101,7 @@ if __name__ == '__main__':
         if args.solver == "CBS":
             # print("***Run CBS***")
             cbs = CBSSolver(my_map, starts, goals)
-            paths = cbs.find_solution(disjoint=args.disjoint, cg_heuristics=args.cg, dg_heuristics=args.dg, wdg_heuristics=args.wdg)
+            paths, _ = cbs.find_solution(disjoint=args.disjoint, cg_heuristics=args.cg, dg_heuristics=args.dg, wdg_heuristics=args.wdg)
         elif args.solver == "Independent":
             print("***Run Independent***")
             solver = IndependentSolver(my_map, starts, goals)
@@ -112,6 +112,9 @@ if __name__ == '__main__':
             paths = solver.find_solution()
         else:
             raise RuntimeError("Unknown solver!")
+
+        if not paths:
+            raise RuntimeError('No Solution')
 
         cost = get_sum_of_cost(paths)
         result_file.write("{},{}\n".format(file, cost))

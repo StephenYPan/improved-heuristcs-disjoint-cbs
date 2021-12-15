@@ -167,7 +167,7 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
                 'timestep': next_t,
                 'parent': cur_node
             }
-            if (next_loc, next_t) in closed_list and next_t:
+            if (next_loc, next_t) in closed_list:
                 existing_node = closed_list[(next_loc, next_t)]
                 if compare_nodes(new_node, existing_node):
                     closed_list[(next_loc, next_t)] = new_node
@@ -179,18 +179,18 @@ def a_star(my_map, start_loc, goal_loc, h_values, agent, constraints):
     return None  # Failed to find solutions
 
 
-def increased_cost_tree_search(my_map, max_cost, cost_offset, start_h_values, goal_h_values):
+def build_mdd(my_map, max_cost, cost_offset, start_h_values, goal_h_values):
     """
-    If ICTS is converted to BFS/DFS then MDD calculations become impossible in maps larger than 8x8.
-    The benefit of using BFS/DFS is the ability to construct a MDD such that it satisfies the 
-    constraints at the cost of adding duplicate edges to ICTS. The number of duplicates edges
+    If build_mdd is converted to BFS/DFS then MDD calculations become impossible in maps larger
+    than 8x8. The benefit of using BFS/DFS is the ability to construct a MDD such that it satisfies
+    the constraints at the cost of generating duplicate edges to MDD. The number of duplicates edges
     increases to a point where computation time takes minutes from seconds.
     """
     ict = set()
     valid_loc = [(v, h) for v, h in start_h_values.items() if h + goal_h_values[v] < max_cost]
-    for t in range(max_cost):
-        cur_loc = [v for v, h in valid_loc if h <= t]
-        for v in cur_loc:
+    for t in range(max_cost - 1):
+        possible_loc = [v for v, h in valid_loc if h <= t and t + goal_h_values[v] < max_cost]
+        for v in possible_loc:
             for direction in range(5):
                 next_v = move(v, direction)
                 next_t = t + 1

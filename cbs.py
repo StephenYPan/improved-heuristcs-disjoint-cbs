@@ -1,4 +1,3 @@
-from logging import raiseExceptions
 from sys import getsizeof
 import time as timer
 import heapq
@@ -7,7 +6,7 @@ import copy
 
 from collections import OrderedDict
 
-from single_agent_planner import compute_heuristics, a_star, get_location, get_sum_of_cost, increased_cost_tree_search
+from single_agent_planner import compute_heuristics, a_star, get_location, get_sum_of_cost, build_mdd
 
 
 def detect_collision(path1, path2):
@@ -60,27 +59,16 @@ def standard_splitting(collision):
 
 def disjoint_splitting(collision, mdds):
     """
-    Weighted probabilities for choosing positive constraints between two agents. The agents' weight
-    is in relation to the number of different paths the other agent has at that timestep. For 
-    example, if a1 has 5 different paths and a2 has 2 path at timestep t, then a1 has a 2/7 chance 
-    of being chosen and a2 has a 5/7 chance of being chosen. 
-    
-    Special case when one agent has no path in their MDD at timestep t, then all the weight falls
-    onto the other agent.
-
-    Special case when one agent has only 1 path and the other has more than 1 path, then set the
-    agent with 1 path to be positive with a 100% chance.
+    Weighted probabilities for choosing positive constraints between two agents. When one agent has
+    no path in their MDD at timestep t, then all the weight falls onto the other agent. Otherwise,
+    the probabilities are 50/50.
     """
     result = standard_splitting(collision)
     a1_weight = len([e for t, e in mdds[result[0]['agent']] if t == result[0]['timestep']])
     a2_weight = len([e for t, e in mdds[result[1]['agent']] if t == result[0]['timestep']])
-    cum_weights = [a2_weight, a1_weight + a2_weight]
+    cum_weights = [1, 2]
     if not a1_weight or not a2_weight: # Special case, if either are zero
         cum_weights = [a1_weight, a1_weight + a2_weight]
-    elif a1_weight == 1 and a2_weight > 1:
-        cum_weights = [1, 1]
-    elif a2_weight == 1 and a1_weight > 1:
-        cum_weights = [0, 1]
     population = [
         [result[0]['agent'], result[0]['loc']],
         [result[1]['agent'], result[1]['loc']]
@@ -90,14 +78,6 @@ def disjoint_splitting(collision, mdds):
         result[i]['agent'] = chosen_agent[0]
         result[i]['loc'] = chosen_agent[1]
         result[i]['positive'] = predicate
-    
-    # Even probabilities
-    # result = standard_splitting(collision)
-    # rand_agent = random.randint(0, 1)
-    # for i, predicate in zip([0, 1], [True, False]):
-    #     result[i]['agent'] = result[rand_agent]['agent']
-    #     result[i]['loc'] = result[rand_agent]['loc']
-    #     result[i]['positive'] = predicate
     return result
 
 
@@ -200,13 +180,22 @@ def min_vertex_weight_min_vertex_cover(weight_adj_matrix, min_vertices, V):
     return cur_vertex_weights
 
 
-def find_extended_mdd_conflict(extended_vertex, mdd, start, end):
+def find_extended_mdd_conflict(mdds, paths):
     """
     Return true if there exists a cardinal conflict with the extended mdd, otherwise false.
     """
+    start = min(len(paths[0]), len(paths[1]))
+    end = max(len(paths[0]), len(paths[1]))
+    if start == end:
+        return False
+    if len(paths[0]) > len(paths[1]):
+        mdds[0], mdds[1] = mdds[1], mdds[0]
+        paths[0], paths[1] = paths[1], paths[0]
+    vertex = paths[0][-1]
+    mdd = [(t, e) for t, e in mdds[1] if t >= start]
     for i in range(start, end):
         mdd_vertex = set([e[1] for t, e in mdd if t == i])
-        if len(mdd_vertex) == 1 and mdd_vertex == {extended_vertex}:
+        if len(mdd_vertex) == 1 and mdd_vertex == {vertex}:
             return True
     return False
 
@@ -225,58 +214,40 @@ def find_cardinal_conflict(mdds, paths):
         agent2_vertex = set([e[1] for e in agent2_edge])
         if len(agent1_vertex) == 1 and len(agent2_vertex) == 1 and agent1_vertex == agent2_vertex:
             return True
-    if len(paths[0]) == len(paths[1]):
-        return False
-    # Extend the shorter mdd to find a cardinal conflict
-    if len(paths[0]) > len(paths[1]):
-        mdds[0], mdds[1] = mdds[1], mdds[0]
-        paths[0], paths[1] = paths[1], paths[0]
-    vertex = paths[0][-1]
-    mdd = [(t, e) for t, e in mdds[1] if t >= min_timestep]
-    max_timestep = max(len(paths[0]), len(paths[1]))
-    return find_extended_mdd_conflict(vertex, mdd, min_timestep, max_timestep)
+    return find_extended_mdd_conflict(mdds, paths)
 
-def find_dependency(mdds, paths):
+
+def find_dependency_conflict(mdds, paths):
     """
     Return true if there exists a dependency conflict, otherwise false.
     """
     min_timestep = min(len(paths[0]), len(paths[1]))
-    agent1_vertex = set()
-    agent2_vertex = set()
-    agent1_vertex.add((0, paths[0][0]))
-    agent2_vertex.add((0, paths[1][0]))
+    joint_mdd = set()
+    joint_mdd.add((0, (paths[0][0], paths[1][0])))
     for i in range(1, min_timestep):
-        agent1_edge = [e for t, e in mdds[0] if t == i and (t - 1, e[0]) in agent1_vertex]
-        agent2_edge = [e for t, e in mdds[1] if t == i and (t - 1, e[0]) in agent2_vertex]
+        agent1_edge = [e for t, e in mdds[0] if t == i]
+        agent2_edge = [e for t, e in mdds[1] if t == i]
         dependency_conflict = True
         for e1 in agent1_edge:
             for e2 in agent2_edge:
-                if (e1[1] == e2[1]): # Vertex collision
+                if (i - 1, (e1[0], e2[0])) not in joint_mdd:
                     continue
-                if (e1[1] == e2[0]) and (e1[0] == e2[1]): # Edge collision
+                if e1[1] == e2[1]: # Vertex collision
+                    continue
+                if e1[1] == e2[0] and e1[0] == e2[1]: # Edge collision
                     continue
                 dependency_conflict = False
-                agent1_vertex.add((i, e1[1]))
-                agent2_vertex.add((i, e2[1]))
+                joint_mdd.add((i, (e1[1], e2[1])))
         if dependency_conflict:
             return True
-    if len(paths[0]) == len(paths[1]):
-        return False
-    # Extend the shorter mdd to find a cardinal conflict
-    if len(paths[0]) > len(paths[1]):
-        mdds[0], mdds[1] = mdds[1], mdds[0]
-        paths[0], paths[1] = paths[1], paths[0]
-    vertex = paths[0][-1]
-    mdd = [(t, e) for t, e in mdds[1] if t >= min_timestep]
-    max_timestep = max(len(paths[0]), len(paths[1]))
-    return find_extended_mdd_conflict(vertex, mdd, min_timestep, max_timestep)
-
+    return find_extended_mdd_conflict(mdds, paths)
 
 
 class CBSSolver(object):
     """The high-level search of CBS."""
 
-    def __init__(self, my_map, starts, goals, constraints=None):
+    def __init__(self, my_map, starts, goals,
+        h_cache=None, mdd_cache=None, low_lv_h_cache=None, partial_mdd_cache=None):
         """my_map   - list of lists specifying obstacle positions
         starts      - [(x1, y1), (x2, y2), ...] list of start locations
         goals       - [(x1, y1), (x2, y2), ...] list of goal locations
@@ -293,38 +264,43 @@ class CBSSolver(object):
 
         self.open_list = []
 
-        self.constraints = constraints if constraints else []
+        self.disjoint = False
         self.stats = True
         self.cg_heuristics = False
         self.dg_heuristics = False
         self.wdg_heuristics = False
 
+        # h-value statistics
+        self.root_h_value = 0
+        self.total_pop_h_value = 0
+        self.total_push_h_value = 0
+
         # High level heuristics cache
         self.ewmvc_mvc_time = 0
-        self.h_cache = OrderedDict()
+        self.h_cache = h_cache if h_cache else OrderedDict()
         self.h_time = 0
         self.h_cache_hit_time = 0
         self.h_cache_miss_time = 0
-        self.h_cache_max_size = 2**20 # 1 Mib, TODO: TUNE HYPERPARAMETER
+        self.h_cache_max_size = 2**22 # 4 Mib, TODO: TUNE HYPERPARAMETER
         self.h_cache_hit = 0
         self.h_cache_miss = 0
         self.h_cache_evict_counter = 0
 
         # High level mdd cache
-        self.mdd_cache = OrderedDict()
+        self.mdd_cache = mdd_cache if mdd_cache else OrderedDict()
         self.mdd_time = 0
         self.mdd_pos_constraint_time = 0
         self.mdd_neg_constraint_time = 0
         self.mdd_clean_up_time = 0
         self.mdd_cache_hit_time = 0
         self.mdd_cache_miss_time = 0
-        self.mdd_cache_max_size = 2**20 # 1 Mib, TODO: TUNE HYPERPARAMETER
+        self.mdd_cache_max_size = 2**21 # 2 Mib, TODO: TUNE HYPERPARAMETER
         self.mdd_cache_hit = 0
         self.mdd_cache_miss = 0
         self.mdd_evict_counter = 0
 
         # Low-level heuristics cache
-        self.low_lv_h_cache = OrderedDict()
+        self.low_lv_h_cache = low_lv_h_cache if low_lv_h_cache else OrderedDict()
         self.low_lv_h_time = 0
         self.low_lv_h_cache_hit_time = 0
         self.low_lv_h_cache_miss_time = 0
@@ -334,7 +310,7 @@ class CBSSolver(object):
         self.low_lv_h_cache_evict_counter = 0
 
         # Partial mdd cache
-        self.partial_mdd_cache = OrderedDict()
+        self.partial_mdd_cache = partial_mdd_cache if partial_mdd_cache else OrderedDict()
         self.partial_mdd_time = 0
         self.partial_mdd_hit_time = 0
         self.partial_mdd_miss_time = 0
@@ -351,8 +327,8 @@ class CBSSolver(object):
     def push_node(self, node):
         g_value = node['cost']
         h_value = node['h_value']
-        # tie_break = len(node['collisions'])
-        tie_break = 0
+        tie_break = len(node['collisions'])
+        # tie_break = 0
         if self.cg_heuristics or self.dg_heuristics or self.wdg_heuristics:
             f_value = g_value + h_value
             heapq.heappush(self.open_list, (f_value, h_value, tie_break, self.num_of_generated, node))
@@ -383,7 +359,82 @@ class CBSSolver(object):
                 right = mid
         self.open_list = self.open_list[0:right]
    
-    def mdd(self, path, constraints):
+    def filter_mdd(self, mdd, path, neg_constraint):
+        """
+        Remove a single negative constraint from the MDD
+        """
+        neg_constraint_timer = timer.time()
+        min_timestep = len(path)
+        loc = neg_constraint['loc']
+        timestep = neg_constraint['timestep']
+        if len(loc) == 1:
+            loc = loc[0]
+            # Remove vertices and the relating vertices in the next timestep
+            edges_to_remove = [(t, e) for t, e in mdd if (t == timestep and e[1] == loc) or (t == timestep + 1 and e[0] == loc)]
+            for t, e in edges_to_remove:
+                mdd.remove((t, e))
+        else:
+            loc = tuple(loc)
+            if (timestep, loc) in mdd: # MDD may not have the negative edge
+                mdd.remove((timestep, loc))
+        self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
+        # Clean up, remove non-connecting nodes
+        clean_up_timer = timer.time()
+        for i in range(min_timestep - 1, 1, -1): # Remove backwards, nodes without children
+            cur_vertex = set([e[0] for t, e in mdd if t == i])
+            prev_t = i - 1
+            prev_layer = [e for t, e in mdd if t == prev_t and e[1] not in cur_vertex]
+            for e in prev_layer:
+                mdd.remove((prev_t, e))
+        for i in range(1, min_timestep - 1): # Remove forward, nodes without parents
+            cur_vertex = set([e[1] for t, e in mdd if t == i])
+            next_t = i + 1
+            next_layer = [e for t, e in mdd if t == next_t and e[0] not in cur_vertex]
+            for e in next_layer:
+                mdd.remove((next_t, e))
+        for i, e in enumerate(zip(path, path[1:])):
+            assert ((i + 1, e) in mdd) is True, 'filtered mdd does not contain path edges'
+        self.mdd_clean_up_time += timer.time() - clean_up_timer
+        return mdd
+
+    def get_mdd_from_cache(self, agent, agent_offset, path, constraints):
+        mdd_cache_timer = timer.time()
+        mdd = None
+        hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in constraints]))
+        hash_pair = (agent + agent_offset[agent], len(path), hash_value)
+        if hash_pair in self.mdd_cache:
+            mdd = self.mdd_cache[hash_pair]
+            self.mdd_cache.move_to_end(hash_pair)
+            self.mdd_cache_hit += 1
+            self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
+        else:
+            # Try again for a cache hit with the old constraints iff the newly added constraint is
+            # a negative constraint. This reduces the time spent filtering from scratch a brand new
+            # MDD of depth n. Fetch the old MDD of depth n and adjust for the new negative
+            # constraint.
+            if constraints and not constraints[-1]['positive']:
+                old_constraints = constraints[:len(constraints) - 1]
+                old_hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in old_constraints]))
+                old_hash_pair = (agent + agent_offset[agent], len(path), old_hash_value)
+                if old_hash_pair in self.mdd_cache:
+                    old_mdd = self.mdd_cache[old_hash_pair].copy()
+                    mdd = self.filter_mdd(old_mdd, path, constraints[-1])
+                    self.mdd_cache_hit += 1
+            if not mdd:
+                # Actual cache miss
+                mdd = self.get_mdd(path, constraints)
+                self.mdd_cache_miss += 1
+            mdd_size = getsizeof(mdd)
+            mdd_cache_size = getsizeof(self.mdd_cache)
+            while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
+                self.mdd_evict_counter += 1
+                self.mdd_cache.popitem()
+                mdd_cache_size = getsizeof(self.mdd_cache)
+            self.mdd_cache[hash_pair] = mdd
+            self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
+        return mdd
+
+    def get_mdd(self, path, constraints):
         """
         Every positive constraint is the same as having intermediary goal nodes along the path
         towards the final goal. Therefore, you can calculate the MDD from (s to n), (n to m), 
@@ -444,7 +495,7 @@ class CBSSolver(object):
                 self.partial_mdd_hit += 1
                 self.partial_mdd_hit_time += timer.time() - partial_mdd_timer
             else:
-                partial_mdd = increased_cost_tree_search(self.my_map, max_cost, cost_offset, h_values[0], h_values[1])
+                partial_mdd = build_mdd(self.my_map, max_cost, cost_offset, h_values[0], h_values[1])
                 partial_mdd_size = getsizeof(partial_mdd)
                 partial_mdd_cache_size = getsizeof(self.partial_mdd_cache)
                 while partial_mdd_cache_size + partial_mdd_size > self.partial_mdd_max_size and len(self.partial_mdd_cache) != 0:
@@ -456,12 +507,12 @@ class CBSSolver(object):
                 self.partial_mdd_miss_time += timer.time() - partial_mdd_timer
             mdd = mdd | partial_mdd # Set union
             self.partial_mdd_time += timer.time() - partial_mdd_timer
-        for i, e in enumerate(zip(path, path[1:])):
-            assert ((i + 1, e) in mdd) is True, 'mdd does not contain path edges'
         # Negative Constraints
         neg_constraint_timer = timer.time()
         neg_constraints = [(c['timestep'], c['loc']) for c in constraints if c['positive'] == False and c['timestep'] < min_timestep]
         if len(neg_constraints) == 0: #  Exit early, MDD was not modified
+            for i, e in enumerate(zip(path, path[1:])):
+                assert ((i + 1, e) in mdd) is True, 'mdd does not contain path edges'
             self.mdd_neg_constraint_time += timer.time() - neg_constraint_timer
             return mdd
         for timestep, loc in neg_constraints:
@@ -490,12 +541,83 @@ class CBSSolver(object):
             next_layer = [e for t, e in mdd if t == next_t and e[0] not in cur_vertex]
             for e in next_layer:
                 mdd.remove((next_t, e))
+        for i, e in enumerate(zip(path, path[1:])):
+            assert ((i + 1, e) in mdd) is True, 'cleaned up mdd does not contain path edges'
         self.mdd_clean_up_time += timer.time() - clean_up_timer
         return mdd
 
+    def cache_stats(self):
+        stat_list = [
+            [
+                self.ewmvc_mvc_time, self.h_time, self.h_cache_hit_time, self.h_cache_miss_time,
+                self.h_cache_hit, self.h_cache_miss, self.h_cache_evict_counter
+            ],
+            [
+                self.mdd_time, self.mdd_pos_constraint_time, self.mdd_neg_constraint_time, 
+                self.mdd_clean_up_time, self.mdd_cache_hit_time, self.mdd_cache_miss_time, 
+                self.mdd_cache_hit, self.mdd_cache_miss, self.mdd_evict_counter
+            ],
+            [
+                self.low_lv_h_time, self.low_lv_h_cache_hit_time, self.low_lv_h_cache_miss_time,
+                self.low_lv_h_cache_hit, self.low_lv_h_cache_miss,
+                self.low_lv_h_cache_evict_counter
+            ],
+            [
+                self.partial_mdd_time, self.partial_mdd_hit_time, self.partial_mdd_miss_time,
+                self.partial_mdd_hit, self.partial_mdd_miss, self.partial_mdd_evict_counter
+            ]
+        ]
+        return stat_list
+
+    def adjust_cache_stats(self, cache_stats):
+        # High level heuristics cache
+        self.ewmvc_mvc_time += cache_stats[0][0]
+        self.h_time += cache_stats[0][1]
+        self.h_cache_hit_time += cache_stats[0][2]
+        self.h_cache_miss_time += cache_stats[0][3]
+        self.h_cache_hit += cache_stats[0][4]
+        self.h_cache_miss += cache_stats[0][5]
+        self.h_cache_evict_counter += cache_stats[0][6]
+        # High level mdd cache
+        self.mdd_time += cache_stats[1][0]
+        self.mdd_pos_constraint_time += cache_stats[1][1]
+        self.mdd_neg_constraint_time += cache_stats[1][2]
+        self.mdd_clean_up_time += cache_stats[1][3]
+        self.mdd_cache_hit_time += cache_stats[1][4]
+        self.mdd_cache_miss_time += cache_stats[1][5]
+        self.mdd_cache_hit += cache_stats[1][6]
+        self.mdd_cache_miss += cache_stats[1][7]
+        self.mdd_evict_counter += cache_stats[1][8]
+        # Low-level heuristics cache
+        self.low_lv_h_time += cache_stats[2][0]
+        self.low_lv_h_cache_hit_time += cache_stats[2][1]
+        self.low_lv_h_cache_miss_time += cache_stats[2][2]
+        self.low_lv_h_cache_hit += cache_stats[2][3]
+        self.low_lv_h_cache_miss += cache_stats[2][4]
+        self.low_lv_h_cache_evict_counter += cache_stats[2][5]
+        # Partial mdd cache
+        self.partial_mdd_time += cache_stats[3][0]
+        self.partial_mdd_hit_time += cache_stats[3][1]
+        self.partial_mdd_miss_time += cache_stats[3][2]
+        self.partial_mdd_hit += cache_stats[3][3]
+        self.partial_mdd_miss += cache_stats[3][4]
+        self.partial_mdd_evict_counter += cache_stats[3][5]
+
+    def get_cardinal_collision(self, mdds, paths, collisions):
+        """
+        Find and return cardinal conflicts if any within the list of collisions.
+        """
+        if len(collisions) == 1:
+            return collisions[0]
+        for c in collisions:
+            if self.cg_heuristic(mdds, paths, [c]):
+                return c
+        return collisions[0]
+
     def cg_heuristic(self, mdds, paths, collisions):
         """
-        Constructs an adjacency matrix of cardinal conflicting agents and calculates the min vertex cover
+        Constructs an adjacency matrix of cardinal conflicting agents 
+        and return the min vertex cover.
         """
         V = len(paths)
         E = 0
@@ -505,17 +627,17 @@ class CBSSolver(object):
             h_start = timer.time()
             a1 = c['a1']
             a2 = c['a2']
-            hash_value = hash(frozenset(mdds[a2])) ^ hash(frozenset(mdds[a1]))
-            agent_hash_pair = (a1, a2, hash_value)
+            hash_value = hash(frozenset(mdds[a1])) ^ hash(frozenset(mdds[a2]))
+            agent_hash_pair = ('cg', hash_value)
             if agent_hash_pair in self.h_cache:
                 is_cardinal_conflict = self.h_cache[agent_hash_pair]
                 self.h_cache.move_to_end(agent_hash_pair)
                 self.h_cache_hit += 1
                 self.h_cache_hit_time += timer.time() - h_start
             else:
-                conflict_mdds = [mdds[a1], mdds[a2]]
+                mdd_pair = [mdds[a1], mdds[a2]]
                 path_pair = [paths[a1], paths[a2]]
-                is_cardinal_conflict = find_cardinal_conflict(conflict_mdds, path_pair)
+                is_cardinal_conflict = find_cardinal_conflict(mdd_pair, path_pair)
                 bool_size = getsizeof(is_cardinal_conflict)
                 h_cache_size = getsizeof(self.h_cache)
                 while h_cache_size + bool_size > self.h_cache_max_size and len(self.h_cache) != 0:
@@ -528,8 +650,8 @@ class CBSSolver(object):
             adj_matrix[a1][a2] = is_cardinal_conflict
             adj_matrix[a2][a1] = is_cardinal_conflict
             E += is_cardinal_conflict
-        if E == 1: # Has to be 1 vertex
-            return 1
+        if E <= 1: # Non-connected vertices or there has to be at least 1 vertex
+            return E
         mvc_timer = timer.time()
         min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
         self.ewmvc_mvc_time += timer.time() - mvc_timer
@@ -537,100 +659,99 @@ class CBSSolver(object):
 
     def dg_heuristic(self, mdds, paths, collisions):
         """
-        Constructs a adjacency matrix and returns the minimum vertex cover
-        
-        python3 run_experiments.py --instance custominstances/exp2.txt --solver CBS --batch --disjoint --dg
+        Constructs an adjacency matrix of dependency conflicts and return the minimum vertex cover.
         """
-        V = len(mdds)
+        V = len(paths)
         E = 0
         adj_matrix = [[0] * V for i in range(V)]
-        is_dependent = False
-        # for a1 in range(0,V-1):
-        #     for a2 in range(a1+1,V):
+        is_dependency_conflict = False
         for c in collisions:
             h_start = timer.time()
             a1 = c['a1']
             a2 = c['a2']
-            h_start = timer.time()
-            hash_value = hash(frozenset(mdds[a2])) ^ hash(frozenset(mdds[a1]))
-            agent_hash_pair = (a1, a2, hash_value)
-
+            hash_value = hash(frozenset(mdds[a1])) ^ hash(frozenset(mdds[a2]))
+            agent_hash_pair = ('dg', hash_value)
             if agent_hash_pair in self.h_cache:
-                is_dependent = self.h_cache[agent_hash_pair]
+                is_dependency_conflict = self.h_cache[agent_hash_pair]
                 self.h_cache.move_to_end(agent_hash_pair)
                 self.h_cache_hit += 1
                 self.h_cache_hit_time += timer.time() - h_start
             else:
                 mdd_pair = [mdds[a1], mdds[a2]]
                 path_pair = [paths[a1], paths[a2]]
-                is_dependent = find_dependency(mdd_pair, path_pair)
-
-                bool_size = getsizeof(is_dependent)
+                is_dependency_conflict = find_dependency_conflict(mdd_pair, path_pair)
+                bool_size = getsizeof(is_dependency_conflict)
                 h_cache_size = getsizeof(self.h_cache)
                 while h_cache_size + bool_size > self.h_cache_max_size and len(self.h_cache) != 0:
                     self.h_cache_evict_counter += 1
                     self.h_cache.popitem()
                     h_cache_size = getsizeof(self.h_cache)
-                self.h_cache[agent_hash_pair] = is_dependent
+                self.h_cache[agent_hash_pair] = is_dependency_conflict
                 self.h_cache_miss += 1
                 self.h_cache_miss_time += timer.time() - h_start
-
-            adj_matrix[a1][a2] = is_dependent
-            adj_matrix[a2][a1] = is_dependent
-            E+= is_dependent
-        
-        # E = sum(sum(adj_matrix,[]))/2
-        if E==1:
-            return 1
+            adj_matrix[a1][a2] = is_dependency_conflict
+            adj_matrix[a2][a1] = is_dependency_conflict
+            E += is_dependency_conflict
+        if E <= 1: # Non-connected vertices or there has to be at least 1 vertex
+            return E
         mvc_timer = timer.time()
         min_vertex_cover_value, _ = min_vertex_cover(adj_matrix, V, E)
         self.ewmvc_mvc_time += timer.time() - mvc_timer
         return min_vertex_cover_value
 
-    
     def wdg_heuristic(self, mdds, paths, collisions, constraints):
         """
-        Construct a weighted dependency graph and returns the edge weight minimum vertex cover
-
-        python3 run_experiments.py --instance instances/test_1.txt --disjoint --solver CBS --batch
-        python3 run_experiments.py --instance custominstances/exp1.txt --disjoint --solver CBS --batch
+        Construct a weighted dependency graph and return the edge weight minimum vertex cover
         """
-
-
         V = len(paths)
         E = 0
         adj_matrix = [[0] * V for i in range(V)]
         vertex_weights = [0] * V
-        edge_weight = 0
-        for col in collisions:
+        for collision in collisions:
+            if not self.dg_heuristic(mdds, paths, [collision]):
+                continue
+            # Find the edge weight for the dependency conflict
             h_start = timer.time()
-            a1 = col['a1']
-            a2 = col['a2']
-            h_start = timer.time()
-            hash_value = hash(frozenset(mdds[a2])) ^ hash(frozenset(mdds[a1]))
-            agent_hash_pair = (a1, a2, hash_value)
-
+            a1 = collision['a1']
+            a2 = collision['a2']
+            edge_weight = 0
+            hash_value = hash(frozenset(mdds[a1])) ^ hash(frozenset(mdds[a2]))
+            agent_hash_pair = ('wdg', hash_value)
             if agent_hash_pair in self.h_cache:
                 edge_weight = self.h_cache[agent_hash_pair]
                 self.h_cache.move_to_end(agent_hash_pair)
                 self.h_cache_hit += 1
                 self.h_cache_hit_time += timer.time() - h_start
-            else:            
-                copy_constraints = copy.deepcopy(constraints) # Deep copy required for modification below
-                ta_constraints = [c for c in copy_constraints if (c['agent'] == a1) or (c['agent'] == a2) and (c['positive']==False)]
-                for c in ta_constraints:
-                    c['agent']=int(c['agent']==a2)
-
-                ta_starts = [self.starts[i] for i in [a1,a2]]
-                ta_goals = [self.goals[i] for i in [a1,a2]]
-
+            else:
+                substarts = [self.starts[a1], self.starts[a2]]
+                subgoals = [self.goals[a1], self.goals[a2]]
+                subconstraints = copy.deepcopy([c for c in constraints if (c['agent'] == a1 or c['agent'] == a2)])
+                # Deep copy required for modification below
+                for c in subconstraints:
+                    c['agent'] = int(c['agent'] == a2)
+                # a2 is guaranteed to be bigger than 0 because of how detect_collision orders it
+                agent_offset = [a1, a2 - 1]
                 # Run a relaxed cbs problem
-                ta_cbs = CBSSolver(self.my_map, ta_starts, ta_goals, ta_constraints)
-                # print(ta_constraints)
-                new_paths = ta_cbs.find_solution(disjoint=True, stats=False, cg_heuristics=True)
-                edge_weight = max((len(new_paths[0])+len(new_paths[1]))-(len(paths[a1])+len(paths[a2])), 0)
-                
-                
+                cbs_start = timer.time()
+                cbs = CBSSolver(my_map=self.my_map, starts=substarts, goals=subgoals,
+                    h_cache=self.h_cache, mdd_cache=self.mdd_cache,
+                    low_lv_h_cache=self.low_lv_h_cache, partial_mdd_cache=self.partial_mdd_cache)
+                new_paths, cache_stats = cbs.find_solution(disjoint=self.disjoint, stats=False,
+                    dg_heuristics=True, constraints=subconstraints, agent_offset=agent_offset)
+                cbs_end = timer.time() - cbs_start
+                # The time spent performing cbs search should be categorized as miss time
+                cbs_cpu_time = cbs_end - cache_stats[0][1] - cache_stats[1][0]
+                # Only remove the redistributed times
+                self.h_time -= cbs_end - cbs_cpu_time
+                self.adjust_cache_stats(cache_stats)
+                if new_paths:
+                    # Get the maximum edge weight
+                    a1_path_diff = len(new_paths[0]) - len(paths[a1])
+                    a2_path_diff = len(new_paths[1]) - len(paths[a2])
+                    edge_weight = max(a1_path_diff, a2_path_diff, 1)
+                else:
+                    # The collision may not produce a solution. Defaults to 1 like dg_heuristic
+                    edge_weight = 1
                 int_size = getsizeof(edge_weight)
                 h_cache_size = getsizeof(self.h_cache)
                 while h_cache_size + int_size > self.h_cache_max_size and len(self.h_cache) != 0:
@@ -639,19 +760,15 @@ class CBSSolver(object):
                     h_cache_size = getsizeof(self.h_cache)
                 self.h_cache[agent_hash_pair] = edge_weight
                 self.h_cache_miss += 1
-                self.h_cache_miss_time += timer.time() - h_start
-
+                self.h_cache_miss_time += timer.time() - h_start - cbs_end + cbs_cpu_time
             adj_matrix[a1][a2] = edge_weight
             adj_matrix[a2][a1] = edge_weight
             vertex_weights[a1] = max(vertex_weights[a1], edge_weight)
             vertex_weights[a2] = max(vertex_weights[a2], edge_weight)
-            E += int(edge_weight>0)
-        
-        if E==1:
-            return 1
-        
+            E += 1
+        if E <= 1:
+            return sum(vertex_weights) >> 1
         mvc_timer = timer.time()
-
         min_vertex_weight_value = sum(vertex_weights)
         min_vertex_cover_value, Set = min_vertex_cover(adj_matrix, V, E)
         if min_vertex_cover_value == 0:
@@ -678,10 +795,9 @@ class CBSSolver(object):
             c = Set & -Set
             r = Set + c
             Set = ((r ^ Set) >> 2) // c | r
-
-            # Found viable min vertex cover
-            if edge_count != E:
+            if edge_count != E: # Not a min vertex cover
                 continue
+            # Once a viable min vertex cover is found, find the min vertex weight for the min vertex
             new_vertex_weights = min_vertex_weight_min_vertex_cover(adj_matrix, min_vertex_cover_vertices, V)
             # Update to new min vertex weights
             vertex_weight_diff = sum(vertex_weights) - sum(new_vertex_weights)
@@ -689,19 +805,20 @@ class CBSSolver(object):
                 continue
             vertex_weights = new_vertex_weights
             min_vertex_weight_value -= vertex_weight_diff
-            
         self.ewmvc_mvc_time += timer.time() - mvc_timer
         return min_vertex_weight_value
 
-
-    def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False, wdg_heuristics=False, stats=True):
+    def find_solution(self, disjoint=False, cg_heuristics=False, dg_heuristics=False,
+        wdg_heuristics=False, stats=True, constraints=None, agent_offset=None):
         """ Finds paths for all agents from their start locations to their goal locations
 
         disjoint        - use disjoint splitting or not
         cg_heuristics   - use conflict graph heuristics
         dg_heuristics   - use dependency graph heuristics
         wdg_heuristics  - use weighted dependency graph heuristics
+        agent_offset     - for cache utilization when running cbs on pairs of agent in wdg heuristic
         """
+        self.disjoint = disjoint
         self.stats = stats
         self.cg_heuristics = cg_heuristics
         self.dg_heuristics = dg_heuristics
@@ -717,7 +834,7 @@ class CBSSolver(object):
             'collisions': [],
             'mdds': []
         }
-        root['constraints'] = self.constraints 
+        root['constraints'] = constraints if constraints else []
         for i in range(self.num_of_agents):  # Find initial path for each agent
             path = a_star(self.my_map, self.starts[i], self.goals[i], self.goal_heuristics[i],
                           i, root['constraints'])
@@ -729,15 +846,14 @@ class CBSSolver(object):
         root['cost'] = get_sum_of_cost(root['paths'])
 
         mdds = [None] * self.num_of_agents
+        if not agent_offset:
+            agent_offset = [0] * self.num_of_agents
 
-        # get MDDs for each agent given their constraints
+        # Fetch MDD from cache
         mdd_start = timer.time()
         for i in range(self.num_of_agents):
-            agent_i_constraints = []
-            if root['constraints']:
-                agent_i_constraints = [(c['timestep'], tuple(c['loc']), c['positive']) for c in root['constraints'] if c['agent'] == i]
-            mdds[i] = self.mdd(root['paths'][i], [c for c in root['constraints'] if c['agent']==i])
-            self.mdd_cache[(i, hash(frozenset(agent_i_constraints)))] = mdds[i]
+            constraints = [c for c in root['constraints'] if c['agent'] == i]
+            mdds[i] = self.get_mdd_from_cache(i, agent_offset, root['paths'][i], constraints)
         root['mdds'] = mdds.copy()
         self.mdd_time += timer.time() - mdd_start
 
@@ -745,24 +861,25 @@ class CBSSolver(object):
         root_h_value = 0
         if cg_heuristics:
             root_h_value = max(root_h_value, self.cg_heuristic(mdds, root['paths'], root['collisions']))
-        # TODO: FIX PARAMETERS
         if dg_heuristics:
             root_h_value = max(root_h_value, self.dg_heuristic(mdds, root['paths'], root['collisions']))
         if wdg_heuristics:
             root_h_value = max(root_h_value, self.wdg_heuristic(mdds, root['paths'], root['collisions'], root['constraints']))
         root['h_value'] = root_h_value
+        self.root_h_value = root_h_value
         self.h_time += timer.time() - heuristics_start
 
         self.push_node(root)
 
         while self.open_list:
             cur_node = self.pop_node()
+            self.total_pop_h_value += cur_node['h_value']
             if not cur_node['collisions']: # Goal reached
                 if self.stats:
-                    self.print_results(cur_node)
-                return cur_node['paths']
-            # TODO: Implement ICBS
-            collision = cur_node['collisions'][0]
+                    self.print_results(cur_node)              
+                return (cur_node['paths'], self.cache_stats())
+            # Find and split on cardinal conflicts if any
+            collision = self.get_cardinal_collision(cur_node['mdds'], cur_node['paths'], cur_node['collisions'])
             constraints = disjoint_splitting(collision, cur_node['mdds']) if disjoint else standard_splitting(collision)
             for constraint in constraints:
                 new_node = {
@@ -788,15 +905,34 @@ class CBSSolver(object):
                 skip = False
                 if constraint['positive']:
                     agent_ids = paths_violate_constraint(constraint, new_node['paths'])
-                    loc = constraint['loc'] if len(constraint['loc']) == 1 else [constraint['loc'][1], constraint['loc'][0]]
                     for i in agent_ids:
-                        new_node['constraints'].append({
-                            'agent': i,
-                            'loc': loc,
-                            'timestep': constraint['timestep'],
-                            'status': constraint['status'],
-                            'positive': False
-                        })
+                        if constraint['status'] == 'vertex':
+                            new_node['constraints'].append({
+                                'agent': i,
+                                'loc': constraint['loc'],
+                                'timestep': constraint['timestep'],
+                                'status': 'vertex',
+                                'positive': False
+                            })
+                        else:
+                            # Add two negative vertex constraints to the agent, since the positive
+                            # edge constraint (u, v) at timestep t forces the agent to be at
+                            # vertex u at timestep t-1 and vertex v at timestep t
+                            for j in range(2):
+                                new_node['constraints'].append({
+                                    'agent': i,
+                                    'loc': [constraint['loc'][j]],
+                                    'timestep': constraint['timestep'] + j - 1,
+                                    'status': 'vertex',
+                                    'positive': False
+                                })
+                            new_node['constraints'].append({
+                                'agent': i,
+                                'loc': [constraint['loc'][1], constraint['loc'][0]],
+                                'timestep': constraint['timestep'],
+                                'status': 'edge',
+                                'positive': False
+                            })
                         path_i = a_star(self.my_map, self.starts[i], self.goals[i], self.goal_heuristics[i], i, new_node['constraints'])
                         if not path_i:
                             skip = True
@@ -807,29 +943,11 @@ class CBSSolver(object):
                 new_node['collisions'] = detect_collisions(new_node['paths'])
                 new_node['cost'] = get_sum_of_cost(new_node['paths'])
 
-                # Cache the MDDs
+                # Fetch MDD from cache
                 mdd_start = timer.time()
                 for i in range(self.num_of_agents):
-                    mdd_cache_timer = timer.time()
-                    hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in new_node['constraints'] if c['agent'] == i]))
-                    agent_hash_pair = (i, hash_value)
-                    if agent_hash_pair in self.mdd_cache:
-                        mdds[i] = self.mdd_cache[agent_hash_pair]
-                        self.mdd_cache.move_to_end(agent_hash_pair)
-                        self.mdd_cache_hit += 1
-                        self.mdd_cache_hit_time += timer.time() - mdd_cache_timer
-                    else:
-                        agent_i_constraints = [c for c in new_node['constraints'] if c['agent'] == i]
-                        mdds[i] = self.mdd(new_node['paths'][i], agent_i_constraints)
-                        mdd_size = getsizeof(mdds[i])
-                        mdd_cache_size = getsizeof(self.mdd_cache)
-                        while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
-                            self.mdd_evict_counter += 1
-                            self.mdd_cache.popitem()
-                            mdd_cache_size = getsizeof(self.mdd_cache)
-                        self.mdd_cache[agent_hash_pair] = mdds[i]
-                        self.mdd_cache_miss += 1
-                        self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
+                    constraints = [c for c in new_node['constraints'] if c['agent'] == i]
+                    mdds[i] = self.get_mdd_from_cache(i, agent_offset, new_node['paths'][i], constraints)
                 new_node['mdds'] = mdds.copy()
                 self.mdd_time += timer.time() - mdd_start
 
@@ -837,18 +955,17 @@ class CBSSolver(object):
                 h_value = 0
                 if cg_heuristics:
                     h_value = max(h_value, self.cg_heuristic(mdds, new_node['paths'], new_node['collisions']))
-                # TODO: Pass mdds 
-                # TODO: FIX PARAMETERS
                 if dg_heuristics:
                     h_value = max(h_value, self.dg_heuristic(mdds, new_node['paths'], new_node['collisions']))
                 if wdg_heuristics:
                     h_value = max(h_value, self.wdg_heuristic(mdds, new_node['paths'], new_node['collisions'], new_node['constraints']))
                 new_node['h_value'] = h_value
+                self.total_push_h_value += h_value
                 self.h_time += timer.time() - heuristics_start
 
                 self.push_node(new_node)
 
-        raise BaseException('No solutions')
+        return (None, self.cache_stats()) # Failed to find solutions
 
 
     def print_results(self, node):
@@ -862,6 +979,9 @@ class CBSSolver(object):
         print(f'Search time:        {search_time:.2f} ({search_time / self.CPU_time * 100:05.2f}%)')
         print(f'Overhead time:      {overhead:.2f} ({overhead / self.CPU_time * 100:05.2f}%)')
         print(f'Overhead ratio:     {overhead / search_time:.2f}:1')
+        print(f'Root h-value:       {self.root_h_value}')
+        print(f'Avg pop h-value:    {self.total_pop_h_value / self.num_of_expanded:.2f}')
+        print(f'Avg push h-value:   {self.total_push_h_value / self.num_of_generated:.2f}')
         print(f'Heuristics cache:   {getsizeof(self.h_cache)} (bytes)')
         print(f'Heuristics time:    {self.h_time:.2f}')
         print(f' - EWMVC/MVC time:  {self.ewmvc_mvc_time:.2f} ({self.ewmvc_mvc_time / self.h_time * 100:05.2f}%)')
