@@ -281,7 +281,7 @@ class CBSSolver(object):
         self.h_time = 0
         self.h_cache_hit_time = 0
         self.h_cache_miss_time = 0
-        self.h_cache_max_size = 2**20 # 1 Mib, TODO: TUNE HYPERPARAMETER
+        self.h_cache_max_size = 2**23 # 8 Mib, TODO: TUNE HYPERPARAMETER
         self.h_cache_hit = 0
         self.h_cache_miss = 0
         self.h_cache_evict_counter = 0
