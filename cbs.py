@@ -423,6 +423,7 @@ class CBSSolver(object):
             if not mdd:
                 # Actual cache miss
                 mdd = self.get_mdd(path, constraints)
+                self.mdd_cache_miss += 1
             mdd_size = getsizeof(mdd)
             mdd_cache_size = getsizeof(self.mdd_cache)
             while mdd_cache_size + mdd_size > self.mdd_cache_max_size and len(self.mdd_cache) != 0:
@@ -430,7 +431,6 @@ class CBSSolver(object):
                 self.mdd_cache.popitem()
                 mdd_cache_size = getsizeof(self.mdd_cache)
             self.mdd_cache[hash_pair] = mdd
-            self.mdd_cache_miss += 1
             self.mdd_cache_miss_time += timer.time() - mdd_cache_timer
         return mdd
 
