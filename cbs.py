@@ -526,6 +526,17 @@ class CBSSolver(object):
         self.partial_mdd_miss += cache_stats[3][4]
         self.partial_mdd_evict_counter += cache_stats[3][5]
 
+    def find_cardinal_collision(self, mdds, paths, collisions):
+        """
+        Find and return cardinal conflicts if any within the list of collisions.
+        """
+        if len(collisions) == 1:
+            return collisions[0]
+        for c in collisions:
+            if self.cg_heuristic(mdds, paths, [c]):
+                return c
+        return collisions[0]
+
     def cg_heuristic(self, mdds, paths, collisions):
         """
         Constructs an adjacency matrix of cardinal conflicting agents 
@@ -808,8 +819,8 @@ class CBSSolver(object):
                 if self.stats:
                     self.print_results(cur_node)              
                 return cur_node['paths'], self.cache_stats()
-            # TODO: Implement ICBS
-            collision = cur_node['collisions'][0]
+            # Find and split on cardinal conflicts if any
+            collision = self.find_cardinal_collision(cur_node['mdds'], cur_node['paths'], cur_node['collisions'])
             constraints = disjoint_splitting(collision, cur_node['mdds']) if disjoint else standard_splitting(collision)
             for constraint in constraints:
                 new_node = {
