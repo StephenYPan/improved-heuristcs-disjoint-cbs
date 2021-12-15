@@ -1,14 +1,15 @@
 import re
 import random
 import sys
+import os
 
 #####################################
 # Script to generate MAPF instances
 # Requirements: map files, scen files downloaded from mapf.info
 # HOW TO RUN: python3 map_handler.py <path to map> <path to scen> <number of agents> 
-# path to input file: <path to output instance> 
+# path to output file: <path to output instance> 
 # Example: python3 map_handler.py maze-128-128-10.map ./scen-random/maze-128-128-10-random-1.scen 10
-# path to input file: ./custominstances/maze-128-128-10-agents.txt
+# path to output file: ./custominstances/maze-128-128-10-agents.txt
 #####################################
 
 def handler(x):
@@ -45,20 +46,22 @@ def main(map_file, scen_file, num_of_agents, output_file):
         data = file1.readlines()
         height = re.findall(r'\d+', data[1])[0]
         width = re.findall(r'\d+', data[2])[0]
-        file2.write(str(height)+' '+str(width)+'\n')
+        file2.write(str(height)+' '+str(width))
+        file2.write(os.linesep)
         for i in range(4, len(data[4:])):
-            file2.write(data[i])
+            for j in range(int(width)-1):
+                file2.write(data[i][j]+' ')
+            file2.write(data[i][-1])
         file2.write('10\n')
-        for i in range(len(agents)):
-            for j in range(4):
-                file2.write(str(agents[i][j])+' ')
-            file2.write('\n')
-        file2.close()
+        for i in range(n_agents):
+            file2.write('{} {} {} {}\n'.format(
+                int(agents[i][0]),
+                int(agents[i][1]),
+                int(agents[i][2]),
+                int(agents[i][3]),
+            ))
 
 
 if __name__ == '__main__':
     output_file = input('path to output file: ')
     main(sys.argv[1], sys.argv[2], sys.argv[3], output_file)
-
-
-
