@@ -412,14 +412,13 @@ class CBSSolver(object):
             # is a negative constraint. This reduces the time spent filtering from scratch a brand
             # new MDD of depth n. Fetch the old MDD of depth n and adjust for the new negative
             # constraint.
-            if constraints:
-                new_constraint = constraints[-1]
+            if constraints and not constraints[-1]['positive']:
                 old_constraints = constraints[:len(constraints) - 1]
                 old_hash_value = hash(frozenset([(c['timestep'], tuple(c['loc']), c['positive']) for c in old_constraints]))
                 old_hash_pair = (agent + agent_offset[agent], len(path), old_hash_value)
-                if not new_constraint['positive'] and old_hash_pair in self.mdd_cache:
+                if old_hash_pair in self.mdd_cache:
                     old_mdd = self.mdd_cache[old_hash_pair].copy()
-                    mdd = self.filter_mdd(old_mdd, path, new_constraint)
+                    mdd = self.filter_mdd(old_mdd, path, constraints[-1])
                     self.mdd_cache_hit += 1
             if not mdd:
                 # Actual cache miss
