@@ -6,3 +6,4 @@ output.txt
 scen-random
 *.map
 *.scen
+.ipynb_checkpoints
