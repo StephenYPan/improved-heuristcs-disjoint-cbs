@@ -5,6 +5,7 @@ from pathlib import Path
 from itertools import product
 from datetime import datetime
 from independent import IndependentSolver
+from single_agent_planner import a_star, compute_heuristics
 
 ROAD = '.'
 WALL = '@'
@@ -23,22 +24,27 @@ def map_init(width, height, density):
         y = loc[1]
         map[x][y] = True
         locs.remove(loc)
+    assert(num_walls+len(locs)==int(width*height))
     return map, locs
 
 
-def is_valid(map, start_loc, end_loc):
+def is_valid(map, start_loc, end_loc, agent):
+    h_value = compute_heuristics(map, end_loc)
     try:
-        solver = IndependentSolver(map, start_loc, end_loc).find_solution()
+        # solver = IndependentSolver(map, start_loc, end_loc).find_solution()
+        solver = a_star(map, start_loc, end_loc, h_value, agent, constraints=[])
     except BaseException:
         return False
     return True
 
 
-def generate_loc(left_loc, n_agents):
+def generate_loc(map, left_loc, n_agents):
     start_locs = []
     end_locs = []
     for agent in range(n_agents):
         agent_locs = random.sample(left_loc, 2)
+        while is_valid(map, agent_locs[0], agent_locs[1], agent)==False:
+            agent_locs = random.sample(left_loc, 2)
         left_loc.remove(agent_locs[0])
         left_loc.remove(agent_locs[1])
         start_locs.append(agent_locs[0])
@@ -58,15 +64,15 @@ if __name__ == "__main__":
     for num in range(1, args.num+1):
         random.seed(datetime.now())
         map, left_loc = map_init(args.size, args.size, args.dense)
-        start_locs, end_locs = generate_loc(left_loc, args.agent)
-        regenerate_map = True
-        while regenerate_map:
-            if is_valid(map, start_locs, end_locs) == False:
-                regenerate_map = True
-                map, left_loc = map_init(args.size, args.size, args.dense)
-                start_locs, end_locs = generate_loc(left_loc, args.agent)
-            else:
-                break
+        start_locs, end_locs = generate_loc(map, left_loc, args.agent)
+        # regenerate_map = True
+        # while regenerate_map:
+        #     if is_valid(map, start_locs, end_locs) == False:
+        #         regenerate_map = True
+        #         map, left_loc = map_init(args.size, args.size, args.dense)
+        #         start_locs, end_locs = generate_loc(left_loc, args.agent)
+        #     else:
+        #         break
         with open(os.path.join(path, 'test_{}.txt'.format(num)), 'w') as f:
             f.write("{} {}\n".format(args.size, args.size))
             for i in range(len(map)):
