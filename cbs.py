@@ -252,7 +252,7 @@ class CBSSolver(object):
         starts      - [(x1, y1), (x2, y2), ...] list of start locations
         goals       - [(x1, y1), (x2, y2), ...] list of goal locations
         """
-
+        
         self.my_map = my_map
         self.starts = starts
         self.goals = goals
@@ -872,9 +872,13 @@ class CBSSolver(object):
         self.push_node(root)
 
         while self.open_list:
+            # if (timer.time()-self.start_time) > time_limit:
+            #     print('overtime')
+            #     return (None, self.cache_stats())
             cur_node = self.pop_node()
             self.total_pop_h_value += cur_node['h_value']
             if not cur_node['collisions']: # Goal reached
+                self.time_results(cur_node)
                 if self.stats:
                     self.print_results(cur_node)              
                 return (cur_node['paths'], self.cache_stats())
@@ -967,11 +971,19 @@ class CBSSolver(object):
 
         return (None, self.cache_stats()) # Failed to find solutions
 
+    def time_results(self, node):
+        self.CPU_time = timer.time() - self.start_time
 
+    def return_metrics(self):
+        metrics = [
+            self.CPU_time, self.h_time, getsizeof(self.h_cache), self.ewmvc_mvc_time, 
+            self.root_h_value, getsizeof(self.mdd_cache),
+            self.mdd_time, self.num_of_expanded, self.num_of_generated
+        ]
+        return metrics
     def print_results(self, node):
         # print("\n Found a solution! \n")
         print()
-        self.CPU_time = timer.time() - self.start_time
         overhead = self.mdd_time + self.h_time
         search_time = self.CPU_time - overhead
         paths = node['paths']

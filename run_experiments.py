@@ -8,6 +8,9 @@ from prioritized import PrioritizedPlanningSolver
 from visualize import Animation
 from single_agent_planner import get_sum_of_cost
 
+import os
+from multiprocessing import Process, Array
+
 SOLVER = "CBS"
 
 def print_mapf_instance(my_map, starts, goals):
@@ -68,13 +71,24 @@ def import_mapf_instance(filename):
     f.close()
     return my_map, starts, goals
 
+def get_metrics(file, args, shared_metrics):
+    my_map, starts, goals = import_mapf_instance(file)
+        
+    cbs = CBSSolver(my_map, starts, goals)
+    paths, _ = cbs.find_solution(disjoint=args.disjoint, cg_heuristics=args.cg, dg_heuristics=args.dg, wdg_heuristics=args.wdg, stats=False)
+    
+    if paths:
+        m=cbs.return_metrics()
+        for i in range(len(m)):
+            shared_metrics[i]=m[i]
+    return 0
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Runs various MAPF algorithms')
     parser.add_argument('--instance', type=str, default=None,
                         help='The name of the instance file(s)')
-    parser.add_argument('--batch', action='store_true', default=False,
-                        help='Use batch output instead of animation')
+    # parser.add_argument('--batch', action='store_true', default=False,
+    #                     help='Use batch output instead of animation')
     parser.add_argument('--disjoint', action='store_true', default=False,
                         help='Use the disjoint splitting')
     parser.add_argument('--solver', type=str, default=SOLVER,
@@ -87,42 +101,67 @@ if __name__ == '__main__':
     parser.add_argument('--wdg', action='store_true', default=False,
                         help='Use weighted dependency graph heuristics')
 
+    parser.add_argument('--time_limit', type=float, default=120,
+                        help='Time limit cutoff')
+    parser.add_argument('--output', type=str, default='./data.txt',
+                        help='Path of output file')
+
     args = parser.parse_args()
 
+    filename = args.output
+    result_file = open(filename, "a", buffering=1)
+    if os.stat(filename).st_size == 0:
+        header = ['map_size', 'num_agents', 'density', 'disjoint', 'heuristic','time_limit', 'cpu_time', 
+        'h_time', 'h_cache', 'emvc_mvc_time', 'root_h_val', 'mdd_cache', 'mdd_time', 'expanded', 'generated']   
+        result_file.write(','.join(header)+'\n')
 
-    result_file = open("results.csv", "w", buffering=1)
+    if args.cg:
+            heuristic='cg'
+    elif args.dg:
+        heuristic='dg'
+    elif args.wdg:
+        heuristic='wdg'
+    else:
+        heuristic=''
 
     for file in sorted(glob.glob(args.instance)):
 
         # print("***Import an instance***")
-        my_map, starts, goals = import_mapf_instance(file)
         # print_mapf_instance(my_map, starts, goals)
+        # print("***Run CBS***")
+        
+        
+        # elif args.solver == "Independent":
+        #     print("***Run Independent***")
+        #     solver = IndependentSolver(my_map, starts, goals)
+        #     paths = solver.find_solution()
+        # elif args.solver == "Prioritized":
+        #     print("***Run Prioritized***")
+        #     solver = PrioritizedPlanningSolver(my_map, starts, goals)
+        #     paths = solver.find_solution()
+        # else:
+        #     raise RuntimeError("Unknown solver!")
 
-        if args.solver == "CBS":
-            # print("***Run CBS***")
-            cbs = CBSSolver(my_map, starts, goals)
-            paths, _ = cbs.find_solution(disjoint=args.disjoint, cg_heuristics=args.cg, dg_heuristics=args.dg, wdg_heuristics=args.wdg)
-        elif args.solver == "Independent":
-            print("***Run Independent***")
-            solver = IndependentSolver(my_map, starts, goals)
-            paths = solver.find_solution()
-        elif args.solver == "Prioritized":
-            print("***Run Prioritized***")
-            solver = PrioritizedPlanningSolver(my_map, starts, goals)
-            paths = solver.find_solution()
-        else:
-            raise RuntimeError("Unknown solver!")
+        
+        my_map, starts, goals = import_mapf_instance(file)
+        map_size = str(len(my_map))
+        agents = len(starts)
+        density = sum(sum(my_map,[])) / (len(my_map)*len(my_map[0]))
 
-        if not paths:
-            raise RuntimeError('No Solution')
-
-        cost = get_sum_of_cost(paths)
-        result_file.write("{},{}\n".format(file, cost))
+        shared_metrics = Array('d', [0]*9)
+        p = Process(target=get_metrics, args=(file,args,shared_metrics))
+        p.start()
+        p.join(timeout=args.time_limit)
+        p.terminate()
+        row = [map_size, agents, density, args.disjoint, heuristic, args.time_limit]+[m for m in shared_metrics]
+        # row = [args.disjoint, heuristic, args.time_limit]+[m for m in shared_metrics]
+        row = map(lambda c: str(c), row)
+        result_file.write(','.join(row)+'\n')
 
 
-        if not args.batch:
-            print("***Test paths on a simulation***")
-            animation = Animation(my_map, starts, goals, paths)
-            # animation.save("output.mp4", 1.0)
-            animation.show()
+        # if not args.batch:
+        #     print("***Test paths on a simulation***")
+        #     animation = Animation(my_map, starts, goals, paths)
+        #     # animation.save("output.mp4", 1.0)
+        #     animation.show()
     result_file.close()
