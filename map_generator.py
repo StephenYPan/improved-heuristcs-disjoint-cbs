@@ -47,13 +47,13 @@ def generate_loc(left_loc, n_agents):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="custom instances for benchmarking")
+    parser = argparse.ArgumentParser(description='custom instances for benchmarking')
     parser.add_argument('--size', type=int, default=8, help='generate N x N size map')
     parser.add_argument('--dense', type=float, default=0.2, help='the obstacles density of the map')
     parser.add_argument('--agent', type=int, default=4, help='number of agents')
     parser.add_argument('--num', type=int, default=50, help='number of instances needed')
     args = parser.parse_args()
-    path = os.path.join(os.getcwd(), "./custom_instances/instances_size_{}".format(args.size))
+    path = os.path.join(os.getcwd(), "./custom_instances/{}_agents_{}_density".format(args.agent, int(args.dense*100)))
     Path(path).mkdir(parents=True, exist_ok=True)
     for num in range(1, args.num+1):
         random.seed(datetime.now())
