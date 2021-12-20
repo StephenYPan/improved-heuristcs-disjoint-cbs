@@ -4,7 +4,6 @@ import argparse
 from pathlib import Path
 from itertools import product
 from datetime import datetime
-from independent import IndependentSolver
 from single_agent_planner import a_star, compute_heuristics
 
 ROAD = '.'
